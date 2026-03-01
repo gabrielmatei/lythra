@@ -1,0 +1,156 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Lythra",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#declarations"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#operators"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.lythra",
+          "match": "#(.*)?$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.lythra",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.lythra",
+              "match": "\\\\."
+            },
+            {
+              "name": "variable.other.interpolation.lythra",
+              "match": "\\{[^}]*\\}"
+            }
+          ]
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "match": "\\b(fn|pipeline|server|channel)\\s+([a-zA-Z_]\\w*|\\\"[^\\\"]+\\\"|'[^']+')",
+          "captures": {
+            "1": {
+              "name": "storage.type.lythra"
+            },
+            "2": {
+              "name": "entity.name.function.lythra"
+            }
+          }
+        },
+        {
+          "match": "\\b([a-zA-Z_]\\w*)\\s*(?=\\()",
+          "name": "entity.name.function.call.lythra"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.lythra",
+          "match": "\\b(if|else|while|for|in|return|match|stream|parallel|await|emit|consult|attempt|times|assert|fallback|stop|halt|on|call)\\b"
+        },
+        {
+          "name": "keyword.operator.logical.lythra",
+          "match": "\\b(and|or|not)\\b"
+        },
+        {
+          "name": "storage.type.lythra",
+          "match": "\\b(let|const|config)\\b"
+        },
+        {
+          "name": "keyword.other.vision.lythra",
+          "match": "\\b(vision|precise|fuzzy|wild|from|using|with|seed|time|remember|forever|forget)\\b"
+        },
+        {
+          "name": "keyword.other.server.lythra",
+          "match": "\\b(open|doors|transmit|receive|inspect|filter)\\b"
+        },
+        {
+          "name": "keyword.other.meta.lythra",
+          "match": "\\b(model|cache|timeout|import|export|log)\\b"
+        },
+        {
+          "name": "constant.language.boolean.lythra",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.language.null.lythra",
+          "match": "\\b(null)\\b"
+        },
+        {
+          "name": "variable.language.env.lythra",
+          "match": "\\b(env)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "support.type.primitive.lythra",
+          "match": "\\b(Int|Float|String|Boolean|Null|Object)\\b"
+        },
+        {
+          "name": "entity.name.type.lythra",
+          "match": "\\b[A-Z]\\w*\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.lythra",
+          "match": "\\b\\d+(\\.\\d+)?\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arrow.lythra",
+          "match": "\\-\\>"
+        },
+        {
+          "name": "keyword.operator.comparison.lythra",
+          "match": "(==|!=|<=|>=|<|>)"
+        },
+        {
+          "name": "keyword.operator.assignment.lythra",
+          "match": "(?<![=!<>])=(?![=])"
+        },
+        {
+          "name": "keyword.operator.arithmetic.lythra",
+          "match": "(\\+|-|\\*|/)"
+        }
+      ]
+    }
+  },
+  "scopeName": "source.lythra"
+}
