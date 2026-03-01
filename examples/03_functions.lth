@@ -1,0 +1,41 @@
+# 03_functions.lth
+# Demonstrates function declarations, recursion, and closures
+
+log "--- Functions & Scope ---"
+
+# Basic function
+fn add(a: Int, b: Int) -> Int:
+  return a + b
+
+log "5 + 7 = " + add(5, 7)
+
+# Recursive function
+fn factorial(n: Int) -> Int:
+  if n <= 1:
+    return 1
+  return n * factorial(n - 1)
+
+log "Factorial of 5 is: " + factorial(5)
+
+# Closures and nested scopes
+fn makeCounter():
+  let count = 0
+  
+  fn step():
+    count = count + 1
+    return count
+    
+  return step
+
+let counterA = makeCounter()
+let counterB = makeCounter()
+
+log "\nCounter A:"
+log counterA() # 1
+log counterA() # 2
+
+log "\nCounter B:"
+log counterB() # 1 (independent state)
+
+log "\nCounter A again:"
+log counterA() # 3

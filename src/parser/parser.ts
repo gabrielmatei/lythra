@@ -339,7 +339,7 @@ class Parser {
       const equals = this.previous();
       const value = this.parseExpression();
 
-      if (expr.kind === 'Identifier' || expr.kind === 'MemberExpr') {
+      if (expr.kind === 'Identifier' || expr.kind === 'MemberExpr' || expr.kind === 'ComputedMemberExpr') {
         if (!this.isAtEnd() && !this.check(TokenType.DEDENT)) {
           this.consume(TokenType.NEWLINE, 'Expected newline after assignment.');
         }
@@ -503,6 +503,16 @@ class Parser {
           kind: 'MemberExpr',
           object: expr,
           property: name.lexeme,
+          line: expr.line,
+          column: expr.column,
+        };
+      } else if (this.match(TokenType.LEFT_BRACKET)) {
+        const property = this.parseExpression();
+        this.consume(TokenType.RIGHT_BRACKET, "Expected ']' after computed property.");
+        expr = {
+          kind: 'ComputedMemberExpr',
+          object: expr,
+          property,
           line: expr.line,
           column: expr.column,
         };

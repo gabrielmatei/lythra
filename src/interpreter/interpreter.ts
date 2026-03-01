@@ -77,6 +77,19 @@ export class Interpreter implements InterpreterInterface {
             throw new RuntimeError(stmt.target, 'Only objects have properties.');
           }
           (obj as Record<string, LythraValue>)[stmt.target.property] = value;
+        } else if (stmt.target.kind === 'ComputedMemberExpr') {
+          const obj = this.evaluate(stmt.target.object);
+          const property = this.evaluate(stmt.target.property);
+
+          if (Array.isArray(obj)) {
+            if (typeof property !== 'number') throw new RuntimeError(stmt.target.property, 'Array index must be a number.');
+            obj[property] = value;
+          } else if (typeof obj === 'object' && obj !== null) {
+            if (typeof property !== 'string') throw new RuntimeError(stmt.target.property, 'Object key must be a string.');
+            (obj as Record<string, LythraValue>)[property] = value;
+          } else {
+            throw new RuntimeError(stmt.target, 'Only arrays and objects support bracket assignment.');
+          }
         } else {
           throw new RuntimeError(stmt.target, 'Invalid assignment target.');
         }
@@ -171,6 +184,22 @@ export class Interpreter implements InterpreterInterface {
         }
         return (obj as Record<string, LythraValue>)[expr.property] ?? null;
       }
+      case 'ComputedMemberExpr': {
+        const obj = this.evaluate(expr.object);
+        const property = this.evaluate(expr.property);
+
+        if (Array.isArray(obj)) {
+          if (typeof property !== 'number') throw new RuntimeError(expr.property, 'Array index must be a number.');
+          return obj[property] ?? null;
+        } else if (typeof obj === 'object' && obj !== null) {
+          if (typeof property !== 'string') throw new RuntimeError(expr.property, 'Object key must be a string.');
+          return (obj as Record<string, LythraValue>)[property] ?? null;
+        } else if (typeof obj === 'string') {
+          if (typeof property !== 'number') throw new RuntimeError(expr.property, 'String index must be a number.');
+          return obj[property] ?? null;
+        }
+        throw new RuntimeError(expr.object, 'Only arrays, objects, and strings support bracket properties.');
+      }
       case 'UnaryExpr': {
         const right = this.evaluate(expr.operand);
 
@@ -205,10 +234,10 @@ export class Interpreter implements InterpreterInterface {
             if (typeof left === 'number' && typeof right === 'number') {
               return left + right;
             }
-            if (typeof left === 'string' && typeof right === 'string') {
-              return left + right;
+            if (typeof left === 'string' || typeof right === 'string') {
+              return stringify(left) + stringify(right);
             }
-            throw new RuntimeError(expr, 'Operands must be two numbers or two strings.');
+            throw new RuntimeError(expr, 'Operands must be numbers or strings.');
           case '-':
             if (typeof left === 'number' && typeof right === 'number') return left - right;
             throw new RuntimeError(expr, 'Operands must be numbers.');

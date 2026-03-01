@@ -1,0 +1,33 @@
+# 02_control_flow.lth
+# Demonstrates if/else branching and while/for loops
+
+log "--- Control Flow ---"
+
+# If / Else branches
+let score = 85
+
+if score >= 90:
+  log "Grade: A"
+else if score >= 80:
+  log "Grade: B"
+else if score >= 70:
+  log "Grade: C"
+else:
+  log "Grade: Failing"
+
+
+# While loops
+log "\nCounting down:"
+let count = 3
+while count > 0:
+  log count
+  count = count - 1
+log "Blastoff! 🚀"
+
+
+# For loops
+log "\nIterating an array:"
+let items = ["apple", "banana", "cherry"]
+
+for fruit in items:
+  log "I like " + fruit

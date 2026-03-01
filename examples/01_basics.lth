@@ -1,0 +1,34 @@
+# 01_basics.lth
+# This script demonstrates variables, types, and basic operations
+
+log "--- Lythra Basics ---"
+
+# Variable declarations
+let name = "Lythra Developer"
+const age = 30 # Constants cannot be reassigned
+
+# String concatenation
+let greeting = "Hello, " + name + "!"
+log greeting
+
+# Arithmetic
+let x = 10
+let y = 3
+let sum = x + y
+let product = x * y
+let quotient = x / y
+
+log "x + y = " + sum
+log "x * y = " + product
+log "x / y = " + quotient
+
+# Reassignment (since x is 'let')
+x = x + 100
+log "New x = " + x
+
+# Objects and Arrays
+let user = { handle: "@dev", active: true }
+let scores = [95, 87, 100]
+
+log "User handle: " + user.handle
+log "First score: " + scores[0]

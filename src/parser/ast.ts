@@ -79,6 +79,14 @@ export interface MemberExpr {
   readonly column: number;
 }
 
+export interface ComputedMemberExpr {
+  readonly kind: 'ComputedMemberExpr';
+  readonly object: Expr;
+  readonly property: Expr;
+  readonly line: number;
+  readonly column: number;
+}
+
 export interface ArrayLiteral {
   readonly kind: 'ArrayLiteral';
   readonly elements: readonly Expr[];
@@ -111,6 +119,7 @@ export type Expr =
   | GroupingExpr
   | CallExpr
   | MemberExpr
+  | ComputedMemberExpr
   | ArrayLiteral
   | ObjectLiteral;
 
