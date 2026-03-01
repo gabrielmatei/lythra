@@ -1,0 +1,19 @@
+{
+  "name": "lythra",
+  "version": "0.1.0",
+  "description": "Language Yielding Typed Heuristic Reasoning Automatically",
+  "type": "module",
+  "main": "dist/cli/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev": "tsc --watch"
+  },
+  "keywords": ["language", "llm", "scripting"],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
