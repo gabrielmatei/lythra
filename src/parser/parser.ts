@@ -78,6 +78,7 @@ class Parser {
     if (this.match(TokenType.INSPECT)) return this.parseInspectStatement();
     if (this.match(TokenType.STOP)) return this.parseStopStatement();
     if (this.match(TokenType.PARALLEL)) return this.parseParallelBlock();
+    if (this.match(TokenType.IMPORT)) return this.parseImportStatement();
 
     return this.parseExpressionStatement();
   }
@@ -304,6 +305,34 @@ class Parser {
     return {
       kind: 'ParallelBlock',
       body,
+      line: start.line,
+      column: start.column,
+    };
+  }
+
+  private parseImportStatement(): ast.Stmt {
+    const start = this.previous();
+
+    let path = "";
+    if (this.match(TokenType.STRING)) {
+      path = this.previous().literal as string;
+    } else {
+      throw this.error(this.peek(), `Expected string literal path after 'import'.`);
+    }
+
+    let alias: string | null = null;
+    if (this.match(TokenType.AS)) {
+      alias = this.consume(TokenType.IDENTIFIER, "Expected identifier after 'as' in import.").lexeme;
+    }
+
+    if (!this.isAtEnd() && !this.check(TokenType.DEDENT)) {
+      this.consume(TokenType.NEWLINE, "Expected newline after import statement.");
+    }
+
+    return {
+      kind: 'ImportStatement',
+      path,
+      alias,
       line: start.line,
       column: start.column,
     };

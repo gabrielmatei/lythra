@@ -413,6 +413,14 @@ export interface ParallelBlock {
   readonly column: number;
 }
 
+export interface ImportStatement {
+  readonly kind: 'ImportStatement';
+  readonly path: string;
+  readonly alias: string | null;
+  readonly line: number;
+  readonly column: number;
+}
+
 // ─── Statement Union ─────────────────────────────────────────────────────────
 
 export type Stmt =
@@ -441,6 +449,7 @@ export type Stmt =
   | InspectStatement
   | StopStatement
   | ParallelBlock
+  | ImportStatement
   | ExpressionStatement;
 
 // ─── Program (Root) ──────────────────────────────────────────────────────────

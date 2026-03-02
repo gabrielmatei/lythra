@@ -5,6 +5,7 @@ export interface VisionOptions {
   context?: LythraValue;
   seed?: number | 'time';
   modifier?: 'precise' | 'fuzzy' | 'wild' | null;
+  model?: string;
 }
 
 export async function callVision(prompt: string, options: VisionOptions): Promise<LythraValue> {
@@ -29,7 +30,8 @@ export async function callVision(prompt: string, options: VisionOptions): Promis
     fullPrompt += `\n\nContext block:\n${JSON.stringify(options.context, null, 2)}`;
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`;
+  const model = options.model || 'gemini-2.5-pro';
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   const requestBody: any = {
     contents: [{ parts: [{ text: fullPrompt }] }],

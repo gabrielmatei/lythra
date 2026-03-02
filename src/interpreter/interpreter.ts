@@ -11,6 +11,9 @@ export class Interpreter implements InterpreterInterface {
   private environment = this.globals;
   public serverManager = new LythraServerManager();
 
+  // Callback injected by LythraRuntime to handle cross-file FS imports
+  public onImport?: (path: string) => Promise<Record<string, LythraValue>>;
+
   constructor() {
     this.globals.define('log', {
       arity: 1,
@@ -287,6 +290,24 @@ export class Interpreter implements InterpreterInterface {
         // Placeholder for query strings / headers map destructuring extraction
         break;
       }
+      case 'ImportStatement': {
+        if (!this.onImport) {
+          throw new RuntimeError(stmt, "Import statements are not supported in this environment.");
+        }
+
+        const exports = await this.onImport(stmt.path);
+
+        if (stmt.alias) {
+          // Mount as a namespace object e.g., utils.something
+          this.environment.define(stmt.alias, exports, false);
+        } else {
+          // Merge directly into current scope
+          for (const [key, val] of Object.entries(exports)) {
+            this.environment.define(key, val, false);
+          }
+        }
+        break;
+      }
       default:
         throw new Error(`Unexpected statement kind: ${(stmt as any).kind}`);
     }
@@ -513,7 +534,8 @@ export class Interpreter implements InterpreterInterface {
           typeAnnotation: expr.typeAnnotation,
           context: contextVal,
           seed,
-          modifier
+          modifier,
+          model: this.environment.getInternal('__model') as string | undefined
         });
 
         // 2. Save hash if caching enabled

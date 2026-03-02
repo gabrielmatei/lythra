@@ -65,4 +65,12 @@ export class Environment {
     if (this.enclosing !== null) return this.enclosing.getModifier();
     return null;
   }
+
+  getAll(): Map<string, LythraValue> {
+    const exports = new Map<string, LythraValue>();
+    for (const [key, val] of this.values.entries()) {
+      exports.set(key, val.value);
+    }
+    return exports;
+  }
 }
