@@ -630,6 +630,34 @@ class Parser {
           line: expr.line,
           column: expr.column,
         };
+      } else if (this.match(TokenType.LENGTH)) {
+        expr = {
+          kind: 'NativePropertyExpr',
+          object: expr,
+          property: 'length',
+          line: expr.line,
+          column: expr.column,
+        };
+      } else if (this.match(TokenType.CONTAINS)) {
+        const argument = this.parseExpression();
+        expr = {
+          kind: 'NativeMethodExpr',
+          object: expr,
+          method: 'contains',
+          argument,
+          line: expr.line,
+          column: expr.column,
+        };
+      } else if (this.match(TokenType.MATCHES)) {
+        const argument = this.parseExpression();
+        expr = {
+          kind: 'NativeMethodExpr',
+          object: expr,
+          method: 'matches',
+          argument,
+          line: expr.line,
+          column: expr.column,
+        };
       } else {
         break;
       }
@@ -673,8 +701,55 @@ class Parser {
     if (this.match(TokenType.STRING)) {
       return { kind: 'StringLiteral', value: this.previous().literal as string, line: this.previous().line, column: this.previous().column };
     }
+
+    if (this.match(TokenType.STRING_HEAD)) {
+      const start = this.previous();
+      const parts: (string | ast.Expr)[] = [start.literal as string];
+
+      while (!this.isAtEnd()) {
+        parts.push(this.parseExpression());
+
+        if (this.match(TokenType.STRING_MID)) {
+          parts.push(this.previous().literal as string);
+        } else if (this.match(TokenType.STRING_TAIL)) {
+          parts.push(this.previous().literal as string);
+          break;
+        } else {
+          throw this.error(this.peek(), `Expected '}' or proper string continuation.`);
+        }
+      }
+
+      return { kind: 'InterpolatedStringExpr', parts, line: start.line, column: start.column };
+    }
+
     if (this.match(TokenType.IDENTIFIER)) {
       return { kind: 'Identifier', name: this.previous().lexeme, line: this.previous().line, column: this.previous().column };
+    }
+
+    if (this.match(TokenType.ENV)) {
+      return { kind: 'EnvAccessExpr', line: this.previous().line, column: this.previous().column };
+    }
+
+    if (this.match(TokenType.READLINE)) {
+      const start = this.previous();
+      const prompt = this.parseExpression();
+      return { kind: 'ReadlineExpr', prompt, line: start.line, column: start.column };
+    }
+
+    if (this.match(TokenType.FETCH)) {
+      const start = this.previous();
+      const url = this.parseExpression();
+      let format: 'text' | 'json' = 'text';
+      if (this.match(TokenType.AS)) {
+        if (this.match(TokenType.TEXT)) {
+          format = 'text';
+        } else if (this.match(TokenType.IDENTIFIER) && this.previous().lexeme === 'json') {
+          format = 'json';
+        } else {
+          throw this.error(this.peek(), `Expected 'text' or 'json' after 'as' in fetch.`);
+        }
+      }
+      return { kind: 'FetchExpr', url, format, line: start.line, column: start.column };
     }
 
     // Phase 4: Vision Call

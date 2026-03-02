@@ -4,6 +4,9 @@ export const enum TokenType {
   // ── Literals ──────────────────────────────────────────────────────────────
   NUMBER = 'NUMBER',
   STRING = 'STRING',
+  STRING_HEAD = 'STRING_HEAD',
+  STRING_MID = 'STRING_MID',
+  STRING_TAIL = 'STRING_TAIL',
   TRUE = 'TRUE',
   FALSE = 'FALSE',
   NULL = 'NULL',

@@ -1,0 +1,39 @@
+# Lythra Phase 6 Demo: Built-ins & Standard Library
+
+log "=== Testing Environment & Interpolation ==="
+let user = env.USER
+log "Hello {user}! You are running this script."
+
+# You can un-comment the next line to test readline interactive inputs!
+# let answer = readline "What is your favorite color? "
+# log "Nice, {answer} is a great color!"
+log ""
+
+log "=== Testing HTTP Fetch (JSON) ==="
+log "Fetching a random todo list item..."
+let todo = fetch "https://jsonplaceholder.typicode.com/todos/2" as json
+log "Todo Title = '{todo.title}'"
+log "Todo Completed = {todo.completed}"
+log ""
+
+log "=== Testing Array Built-ins ==="
+let arr = [10, 20, 30, 40]
+log "Array: [10, 20, 30, 40]"
+log "Array Length: {arr length}"
+log "Does the array contain 20? {arr contains 20}"
+log "Does the array contain 50? {arr contains 50}"
+log ""
+
+log "=== Testing String Built-ins ==="
+let str = "Lythra is awesome!"
+log "String: '{str}'"
+log "String Length: {str length}"
+log "Does string contain 'Lythra'? {str contains "Lythra"}"
+
+# Regex matching examples
+let matchesHello = str matches "^Lythra.*"
+let matchesNum = str matches "[0-9]"
+log "Does string start with 'Lythra' (regex)? {matchesHello}"
+log "Does string contain numbers (regex)? {matchesNum}"
+
+log "=== Demo Complete ==="

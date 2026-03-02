@@ -31,6 +31,10 @@ class Lexer {
   private readonly indentStack: number[] = [0];
   private atLineStart = true;
 
+  // ── Interpolation state ────────────────────────────────────────────────
+  private readonly modeStack: ('NORMAL' | 'INTERP')[] = ['NORMAL'];
+  private readonly interpBraceDepth: number[] = [];
+
   constructor(source: string) {
     this.source = source;
   }
@@ -139,8 +143,31 @@ class Lexer {
       // ── Single-character tokens ───────────────────────────────────────
       case '(': this.addTokenFromLexeme(TokenType.LEFT_PAREN); break;
       case ')': this.addTokenFromLexeme(TokenType.RIGHT_PAREN); break;
-      case '{': this.addTokenFromLexeme(TokenType.LEFT_BRACE); break;
-      case '}': this.addTokenFromLexeme(TokenType.RIGHT_BRACE); break;
+      case '{':
+        if (this.currentMode() === 'INTERP') {
+          this.interpBraceDepth[this.interpBraceDepth.length - 1]!++;
+        }
+        this.addTokenFromLexeme(TokenType.LEFT_BRACE);
+        break;
+
+      case '}':
+        if (this.currentMode() === 'INTERP') {
+          const depth = this.interpBraceDepth[this.interpBraceDepth.length - 1]!;
+          if (depth === 0) {
+            // Closes the interpolation block!
+            this.modeStack.pop();
+            this.interpBraceDepth.pop();
+            // Start scanning the remainder of the string
+            this.start = this.current;
+            this.startColumn = this.column;
+            this.readStringFragment(false);
+            break;
+          } else {
+            this.interpBraceDepth[this.interpBraceDepth.length - 1]!--;
+          }
+        }
+        this.addTokenFromLexeme(TokenType.RIGHT_BRACE);
+        break;
       case '[': this.addTokenFromLexeme(TokenType.LEFT_BRACKET); break;
       case ']': this.addTokenFromLexeme(TokenType.RIGHT_BRACKET); break;
       case ':': this.addTokenFromLexeme(TokenType.COLON); break;
@@ -231,7 +258,7 @@ class Lexer {
 
       // ── Strings ───────────────────────────────────────────────────────
       case '"':
-        this.readString();
+        this.readStringFragment(true);
         break;
 
       default:
@@ -272,10 +299,14 @@ class Lexer {
 
   // ── String Scanning ────────────────────────────────────────────────────
 
-  private readString(): void {
+  private currentMode(): 'NORMAL' | 'INTERP' {
+    return this.modeStack[this.modeStack.length - 1]!;
+  }
+
+  private readStringFragment(isStart: boolean): void {
     let value = '';
 
-    while (!this.isAtEnd() && this.peek() !== '"') {
+    while (!this.isAtEnd() && this.peek() !== '"' && this.peek() !== '{') {
       if (this.peek() === '\n') {
         this.addError(
           'Unterminated string. Strings cannot span multiple lines.',
@@ -301,7 +332,7 @@ class Lexer {
           default:
             this.addError(
               `Unknown escape sequence '\\${escaped}'.`,
-              `Valid escape sequences: \\n, \\t, \\\\, \\"`,
+              `Valid escape sequences: \\n, \\t, \\\\, \\", \\{, \\}`,
             );
             value += escaped;
             break;
@@ -319,11 +350,17 @@ class Lexer {
       return;
     }
 
-    // Consume the closing "
-    this.advance();
+    const c = this.advance(); // consume the '"' or '{'
 
     const lexeme = this.source.slice(this.start, this.current);
-    this.addToken(TokenType.STRING, lexeme, value);
+
+    if (c === '"') {
+      this.addToken(isStart ? TokenType.STRING : TokenType.STRING_TAIL, lexeme, value);
+    } else if (c === '{') {
+      this.addToken(isStart ? TokenType.STRING_HEAD : TokenType.STRING_MID, lexeme, value);
+      this.modeStack.push('INTERP');
+      this.interpBraceDepth.push(0);
+    }
   }
 
   // ── Number Scanning ────────────────────────────────────────────────────

@@ -19,6 +19,51 @@ export interface StringLiteral {
   readonly column: number;
 }
 
+export interface InterpolatedStringExpr {
+  readonly kind: 'InterpolatedStringExpr';
+  readonly parts: readonly (string | Expr)[];
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface EnvAccessExpr {
+  readonly kind: 'EnvAccessExpr';
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface ReadlineExpr {
+  readonly kind: 'ReadlineExpr';
+  readonly prompt: Expr;
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface FetchExpr {
+  readonly kind: 'FetchExpr';
+  readonly url: Expr;
+  readonly format: 'text' | 'json'; // default to text
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface NativePropertyExpr {
+  readonly kind: 'NativePropertyExpr';
+  readonly object: Expr;
+  readonly property: 'length';
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface NativeMethodExpr {
+  readonly kind: 'NativeMethodExpr';
+  readonly object: Expr;
+  readonly method: 'contains' | 'matches';
+  readonly argument: Expr;
+  readonly line: number;
+  readonly column: number;
+}
+
 export interface BooleanLiteral {
   readonly kind: 'BooleanLiteral';
   readonly value: boolean;
@@ -120,12 +165,19 @@ export interface VisionExpr {
 // ─── Expression Union ────────────────────────────────────────────────────────
 
 export type Expr =
-  | NumberLiteral
-  | StringLiteral
   | BooleanLiteral
   | NullLiteral
+  | NumberLiteral
+  | StringLiteral
+  | InterpolatedStringExpr
   | Identifier
+  | EnvAccessExpr
+  | ReadlineExpr
+  | FetchExpr
+  | NativePropertyExpr
+  | NativeMethodExpr
   | BinaryExpr
+  | VisionExpr
   | UnaryExpr
   | GroupingExpr
   | CallExpr

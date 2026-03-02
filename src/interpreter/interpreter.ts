@@ -1,3 +1,4 @@
+import * as readline from 'readline/promises';
 import * as ast from '../parser/ast.js';
 import { Environment } from './environment.js';
 import { LythraValue, RuntimeError, ReturnEx, HaltEx, AssertionEx, InterpreterInterface, LythraCallable, stringify } from './types.js';
@@ -195,6 +196,40 @@ export class Interpreter implements InterpreterInterface {
       case 'BooleanLiteral':
       case 'NullLiteral':
         return 'value' in expr ? (expr as any).value : null;
+      case 'InterpolatedStringExpr': {
+        let result = '';
+        for (const part of expr.parts) {
+          if (typeof part === 'string') {
+            result += part;
+          } else {
+            result += stringify(await this.evaluate(part));
+          }
+        }
+        return result;
+      }
+      case 'EnvAccessExpr':
+        return process.env as Record<string, any>;
+      case 'ReadlineExpr': {
+        const promptStr = stringify(await this.evaluate(expr.prompt));
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout
+        });
+        const answer = await rl.question(promptStr);
+        rl.close();
+        return answer;
+      }
+      case 'FetchExpr': {
+        const urlStr = stringify(await this.evaluate(expr.url));
+        try {
+          const res = await fetch(urlStr);
+          if (!res.ok) throw new RuntimeError(expr, `Fetch failed with status ${res.status}`);
+          if (expr.format === 'json') return await res.json();
+          return await res.text();
+        } catch (e: any) {
+          throw new RuntimeError(expr, `Fetch failed: ${e.message}`);
+        }
+      }
       case 'Identifier':
         return this.environment.get(expr.name, expr);
       case 'GroupingExpr':
@@ -213,6 +248,36 @@ export class Interpreter implements InterpreterInterface {
         const obj = await this.evaluate(expr.object);
         if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) throw new RuntimeError(expr.object, 'Only objects have properties.');
         return (obj as Record<string, LythraValue>)[expr.property] ?? null;
+      }
+      case 'NativePropertyExpr': {
+        const obj = await this.evaluate(expr.object);
+        if (Array.isArray(obj) || typeof obj === 'string') {
+          if (expr.property === 'length') return obj.length;
+        }
+        throw new RuntimeError(expr.object, `Property '${expr.property}' is only available on arrays and strings.`);
+      }
+      case 'NativeMethodExpr': {
+        const obj = await this.evaluate(expr.object);
+        const arg = await this.evaluate(expr.argument);
+
+        if (expr.method === 'contains') {
+          if (Array.isArray(obj)) return obj.some(e => e === arg);
+          if (typeof obj === 'string') return obj.includes(stringify(arg));
+          throw new RuntimeError(expr.object, `'contains' is only available on arrays and strings.`);
+        }
+
+        if (expr.method === 'matches') {
+          if (typeof obj !== 'string') throw new RuntimeError(expr.object, `'matches' is only available on strings.`);
+          const regexStr = stringify(arg);
+          try {
+            const regex = new RegExp(regexStr);
+            return regex.test(obj);
+          } catch (e: any) {
+            throw new RuntimeError(expr.argument, `Invalid regex: ${e.message}`);
+          }
+        }
+
+        throw new RuntimeError(expr.object, `Unknown native method '${expr.method}'.`);
       }
       case 'ComputedMemberExpr': {
         const obj = await this.evaluate(expr.object);

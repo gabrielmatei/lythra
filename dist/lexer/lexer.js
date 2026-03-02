@@ -18,6 +18,9 @@ class Lexer {
     // ── Indentation state ──────────────────────────────────────────────────
     indentStack = [0];
     atLineStart = true;
+    // ── Interpolation state ────────────────────────────────────────────────
+    modeStack = ['NORMAL'];
+    interpBraceDepth = [];
     constructor(source) {
         this.source = source;
     }
@@ -107,9 +110,28 @@ class Lexer {
                 this.addTokenFromLexeme("RIGHT_PAREN" /* TokenType.RIGHT_PAREN */);
                 break;
             case '{':
+                if (this.currentMode() === 'INTERP') {
+                    this.interpBraceDepth[this.interpBraceDepth.length - 1]++;
+                }
                 this.addTokenFromLexeme("LEFT_BRACE" /* TokenType.LEFT_BRACE */);
                 break;
             case '}':
+                if (this.currentMode() === 'INTERP') {
+                    const depth = this.interpBraceDepth[this.interpBraceDepth.length - 1];
+                    if (depth === 0) {
+                        // Closes the interpolation block!
+                        this.modeStack.pop();
+                        this.interpBraceDepth.pop();
+                        // Start scanning the remainder of the string
+                        this.start = this.current;
+                        this.startColumn = this.column;
+                        this.readStringFragment(false);
+                        break;
+                    }
+                    else {
+                        this.interpBraceDepth[this.interpBraceDepth.length - 1]--;
+                    }
+                }
                 this.addTokenFromLexeme("RIGHT_BRACE" /* TokenType.RIGHT_BRACE */);
                 break;
             case '[':
@@ -206,7 +228,7 @@ class Lexer {
                 break;
             // ── Strings ───────────────────────────────────────────────────────
             case '"':
-                this.readString();
+                this.readStringFragment(true);
                 break;
             default:
                 // ── Numbers ───────────────────────────────────────────────────
@@ -238,9 +260,12 @@ class Lexer {
         this.atLineStart = true;
     }
     // ── String Scanning ────────────────────────────────────────────────────
-    readString() {
+    currentMode() {
+        return this.modeStack[this.modeStack.length - 1];
+    }
+    readStringFragment(isStart) {
         let value = '';
-        while (!this.isAtEnd() && this.peek() !== '"') {
+        while (!this.isAtEnd() && this.peek() !== '"' && this.peek() !== '{') {
             if (this.peek() === '\n') {
                 this.addError('Unterminated string. Strings cannot span multiple lines.', 'Close the string with a double quote before the end of the line.');
                 return;
@@ -272,7 +297,7 @@ class Lexer {
                         value += '}';
                         break;
                     default:
-                        this.addError(`Unknown escape sequence '\\${escaped}'.`, `Valid escape sequences: \\n, \\t, \\\\, \\"`);
+                        this.addError(`Unknown escape sequence '\\${escaped}'.`, `Valid escape sequences: \\n, \\t, \\\\, \\", \\{, \\}`);
                         value += escaped;
                         break;
                 }
@@ -285,10 +310,16 @@ class Lexer {
             this.addError('Unterminated string.', 'Close the string with a double quote.');
             return;
         }
-        // Consume the closing "
-        this.advance();
+        const c = this.advance(); // consume the '"' or '{'
         const lexeme = this.source.slice(this.start, this.current);
-        this.addToken("STRING" /* TokenType.STRING */, lexeme, value);
+        if (c === '"') {
+            this.addToken(isStart ? "STRING" /* TokenType.STRING */ : "STRING_TAIL" /* TokenType.STRING_TAIL */, lexeme, value);
+        }
+        else if (c === '{') {
+            this.addToken(isStart ? "STRING_HEAD" /* TokenType.STRING_HEAD */ : "STRING_MID" /* TokenType.STRING_MID */, lexeme, value);
+            this.modeStack.push('INTERP');
+            this.interpBraceDepth.push(0);
+        }
     }
     // ── Number Scanning ────────────────────────────────────────────────────
     readNumber() {
