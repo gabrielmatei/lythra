@@ -280,6 +280,41 @@ export interface PipelineDeclaration {
   readonly column: number;
 }
 
+// ─── Declarations ───
+
+export interface ServerDeclaration {
+  readonly kind: 'ServerDeclaration';
+  readonly name: string;
+  readonly port: Expr; // evaluated as a number
+  readonly body: Block;
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface ChannelDeclaration {
+  readonly kind: 'ChannelDeclaration';
+  readonly path: string;
+  readonly body: Block;
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface FilterDeclaration {
+  readonly kind: 'FilterDeclaration';
+  readonly pathPattern: string | 'all';
+  readonly body: Block;
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface MethodHandler {
+  readonly kind: 'MethodHandler';
+  readonly method: string; // 'GET', 'POST', etc.
+  readonly body: Block;
+  readonly line: number;
+  readonly column: number;
+}
+
 export interface Block {
   readonly kind: 'Block';
   readonly statements: readonly Stmt[];
@@ -332,6 +367,45 @@ export interface AssertStatement {
   readonly column: number;
 }
 
+// ─── Statements ───
+
+export interface OpenDoorsStatement {
+  readonly kind: 'OpenDoorsStatement';
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface TransmitStatement {
+  readonly kind: 'TransmitStatement';
+  readonly status?: Expr; // e.g., 200, 404
+  readonly data: Expr; // e.g., "Hello" or { message: "" }
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface ReceiveStatement {
+  readonly kind: 'ReceiveStatement';
+  readonly format: 'text' | 'json';
+  readonly variableName: string; // body -> local variable text/json
+  readonly expectedType?: ObjectLiteral; // very basic type assertion via AST
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface InspectStatement {
+  readonly kind: 'InspectStatement';
+  readonly target: 'params' | 'headers';
+  readonly expectedType: ObjectLiteral; // destructured properties to inject into env
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface StopStatement {
+  readonly kind: 'StopStatement';
+  readonly line: number;
+  readonly column: number;
+}
+
 // ─── Statement Union ─────────────────────────────────────────────────────────
 
 export type Stmt =
@@ -345,11 +419,20 @@ export type Stmt =
   | ReturnStatement
   | FnDeclaration
   | PipelineDeclaration
+  | ServerDeclaration
+  | ChannelDeclaration
+  | FilterDeclaration
+  | MethodHandler
   | ModifierBlock
   | RememberBlock
   | ForgetStatement
   | AttemptStatement
   | AssertStatement
+  | OpenDoorsStatement
+  | TransmitStatement
+  | ReceiveStatement
+  | InspectStatement
+  | StopStatement
   | ExpressionStatement;
 
 // ─── Program (Root) ──────────────────────────────────────────────────────────

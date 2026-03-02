@@ -38,6 +38,8 @@ class Parser {
           throw e; // unexpected error
         }
       }
+      // Eat trailing ignored tokens at global scope
+      while (this.match(TokenType.NEWLINE, TokenType.DEDENT, TokenType.INDENT)) { }
     }
 
     return {
@@ -61,11 +63,20 @@ class Parser {
     if (this.match(TokenType.RETURN)) return this.parseReturnStatement();
     if (this.match(TokenType.FN)) return this.parseFnDeclaration();
     if (this.match(TokenType.PIPELINE)) return this.parsePipelineDeclaration();
+    if (this.match(TokenType.SERVER)) return this.parseServerDeclaration();
+    if (this.match(TokenType.CHANNEL)) return this.parseChannelDeclaration();
+    if (this.match(TokenType.FILTER)) return this.parseFilterDeclaration();
+    if (this.match(TokenType.ON)) return this.parseMethodHandler();
     if (this.match(TokenType.PRECISE, TokenType.FUZZY, TokenType.WILD)) return this.parseModifierBlock();
     if (this.match(TokenType.REMEMBER)) return this.parseRememberBlock();
     if (this.match(TokenType.FORGET)) return this.parseForgetStatement();
     if (this.match(TokenType.ATTEMPT)) return this.parseAttemptStatement();
     if (this.match(TokenType.ASSERT)) return this.parseAssertStatement();
+    if (this.match(TokenType.OPEN)) return this.parseOpenDoorsStatement();
+    if (this.match(TokenType.TRANSMIT)) return this.parseTransmitStatement();
+    if (this.match(TokenType.RECEIVE)) return this.parseReceiveStatement();
+    if (this.match(TokenType.INSPECT)) return this.parseInspectStatement();
+    if (this.match(TokenType.STOP)) return this.parseStopStatement();
 
     return this.parseExpressionStatement();
   }
@@ -286,10 +297,12 @@ class Parser {
 
     // Can be `forget all` or `forget ident`
     let target = '';
-    if (this.match(TokenType.ALL)) {
-      target = 'all';
-    } else if (this.match(TokenType.IDENTIFIER)) {
-      target = this.previous().lexeme;
+    if (this.match(TokenType.IDENTIFIER)) {
+      if (this.previous().lexeme === 'all') {
+        target = 'all';
+      } else {
+        target = this.previous().lexeme;
+      }
     } else {
       throw this.error(this.peek(), "Expected 'all' or a variable name after 'forget'.");
     }
@@ -406,6 +419,238 @@ class Parser {
       column: start.column,
     };
   }
+
+  // ─── Phase 7: Web Server Parsing ───
+
+  private parseServerDeclaration(): ast.Stmt {
+    const start = this.previous();
+    const name = this.consume(TokenType.IDENTIFIER, "Expected server name.");
+    this.consume(TokenType.ON, "Expected 'on' before port number.");
+
+    const port = this.parseExpression();
+
+    this.consume(TokenType.COLON, "Expected ':' before server body.");
+    this.consume(TokenType.NEWLINE, "Expected newline before server body.");
+
+    const body = this.parseBlock();
+
+    return {
+      kind: 'ServerDeclaration',
+      name: name.lexeme,
+      port,
+      body,
+      line: start.line,
+      column: start.column
+    };
+  }
+
+  private parseChannelDeclaration(): ast.Stmt {
+    const start = this.previous();
+    let path = "/";
+    if (this.match(TokenType.STRING)) {
+      path = this.previous().lexeme.slice(1, -1); // strip quotes
+    } else {
+      throw this.error(this.peek(), "Expected string path after 'channel'.");
+    }
+
+    this.consume(TokenType.COLON, "Expected ':' before channel body.");
+    this.consume(TokenType.NEWLINE, "Expected newline before channel body.");
+
+    const body = this.parseBlock();
+
+    return {
+      kind: 'ChannelDeclaration',
+      path,
+      body,
+      line: start.line,
+      column: start.column
+    };
+  }
+
+  private parseFilterDeclaration(): ast.Stmt {
+    const start = this.previous();
+    let pathPattern = "all";
+    if (this.match(TokenType.IDENTIFIER) && this.previous().lexeme === "all") {
+      pathPattern = "all";
+    } else if (this.match(TokenType.STRING)) {
+      pathPattern = this.previous().lexeme.slice(1, -1);
+    } else {
+      throw this.error(this.peek(), "Expected 'all' or string pattern after 'filter'.");
+    }
+
+    this.consume(TokenType.COLON, "Expected ':' before filter body.");
+    this.consume(TokenType.NEWLINE, "Expected newline before filter body.");
+
+    const body = this.parseBlock();
+
+    return {
+      kind: 'FilterDeclaration',
+      pathPattern,
+      body,
+      line: start.line,
+      column: start.column
+    };
+  }
+
+  private parseMethodHandler(): ast.Stmt {
+    const start = this.previous();
+    this.consume(TokenType.CALL, "Expected 'call' after 'on'.");
+    const methodToken = this.consume(TokenType.IDENTIFIER, "Expected HTTP method (GET, POST, etc.).");
+    const method = methodToken.lexeme.toUpperCase();
+
+    this.consume(TokenType.COLON, "Expected ':' before method body.");
+    this.consume(TokenType.NEWLINE, "Expected newline before method body.");
+
+    const body = this.parseBlock();
+
+    return {
+      kind: 'MethodHandler',
+      method,
+      body,
+      line: start.line,
+      column: start.column
+    };
+  }
+
+  private parseOpenDoorsStatement(): ast.Stmt {
+    const start = this.previous();
+    this.consume(TokenType.DOORS, "Expected 'doors' after 'open'.");
+
+    if (!this.isAtEnd() && !this.check(TokenType.DEDENT)) {
+      this.consume(TokenType.NEWLINE, 'Expected newline after open doors statement.');
+    }
+
+    return {
+      kind: 'OpenDoorsStatement',
+      line: start.line,
+      column: start.column
+    };
+  }
+
+  private parseTransmitStatement(): ast.Stmt {
+    const start = this.previous();
+    let status: ast.Expr | undefined = undefined;
+
+    // Optional HTTP status code before payload
+    if (this.check(TokenType.NUMBER)) {
+      status = this.parseExpression();
+    }
+
+    const data = this.parseExpression();
+
+    if (!this.isAtEnd() && !this.check(TokenType.DEDENT)) {
+      this.consume(TokenType.NEWLINE, 'Expected newline after transmit statement.');
+    }
+
+    return {
+      kind: 'TransmitStatement',
+      status,
+      data,
+      line: start.line,
+      column: start.column
+    };
+  }
+
+  private parseReceiveStatement(): ast.Stmt {
+    const start = this.previous();
+    if (this.match(TokenType.IDENTIFIER)) {
+      if (this.previous().lexeme !== 'body') throw this.error(this.previous(), "Expected 'body' after 'receive'.");
+    } else {
+      throw this.error(this.peek(), "Expected 'body' after 'receive'.");
+    }
+    this.consume(TokenType.AS, "Expected 'as' after 'body'.");
+
+    let format: 'text' | 'json' = 'json';
+    let typeNode: ast.ObjectLiteral | undefined = undefined;
+    let variableName = "text";
+
+    if (this.match(TokenType.IDENTIFIER)) {
+      if (this.previous().lexeme === "text") {
+        format = "text";
+        variableName = "text";
+        if (this.match(TokenType.COLON)) {
+          this.consume(TokenType.IDENTIFIER, "Expected 'String' after ':'.");
+        }
+      } else {
+        throw this.error(this.previous(), "Expected 'text' or json object destructuring after 'as'.");
+      }
+    } else {
+      format = "json";
+      variableName = "body";
+      const expr = this.parseExpression();
+      if (expr.kind === 'ObjectLiteral') {
+        typeNode = expr;
+      } else {
+        throw this.error(this.peek(), "Expected object literal for receive schema.");
+      }
+    }
+
+    if (!this.isAtEnd() && !this.check(TokenType.DEDENT)) {
+      this.consume(TokenType.NEWLINE, 'Expected newline after receive statement.');
+    }
+
+    return {
+      kind: 'ReceiveStatement',
+      format,
+      variableName,
+      expectedType: typeNode,
+      line: start.line,
+      column: start.column
+    };
+  }
+
+  private parseInspectStatement(): ast.Stmt {
+    const start = this.previous();
+    let target: 'params' | 'headers' = 'params';
+
+    if (this.match(TokenType.IDENTIFIER)) {
+      if (this.previous().lexeme === 'params') {
+        target = 'params';
+      } else if (this.previous().lexeme === 'headers') {
+        target = 'headers';
+      } else {
+        throw this.error(this.previous(), "Expected 'params' or 'headers' after 'inspect'.");
+      }
+    } else {
+      throw this.error(this.peek(), "Expected 'params' or 'headers' after 'inspect'.");
+    }
+
+    this.consume(TokenType.AS, "Expected 'as' after target.");
+
+    const expr = this.parseExpression();
+    let expectedType: ast.ObjectLiteral;
+    if (expr.kind === 'ObjectLiteral') {
+      expectedType = expr;
+    } else {
+      throw this.error(this.peek(), "Expected object literal for inspect schema.");
+    }
+
+    if (!this.isAtEnd() && !this.check(TokenType.DEDENT)) {
+      this.consume(TokenType.NEWLINE, 'Expected newline after inspect statement.');
+    }
+
+    return {
+      kind: 'InspectStatement',
+      target,
+      expectedType,
+      line: start.line,
+      column: start.column
+    };
+  }
+
+  private parseStopStatement(): ast.Stmt {
+    const start = this.previous();
+    if (!this.isAtEnd() && !this.check(TokenType.DEDENT)) {
+      this.consume(TokenType.NEWLINE, 'Expected newline after stop statement.');
+    }
+    return {
+      kind: 'StopStatement',
+      line: start.line,
+      column: start.column
+    };
+  }
+
+  // ─── Helpers ───
 
   private parseParams(): ast.Param[] {
     const params: ast.Param[] = [];
@@ -741,10 +986,14 @@ class Parser {
       const url = this.parseExpression();
       let format: 'text' | 'json' = 'text';
       if (this.match(TokenType.AS)) {
-        if (this.match(TokenType.TEXT)) {
-          format = 'text';
-        } else if (this.match(TokenType.IDENTIFIER) && this.previous().lexeme === 'json') {
-          format = 'json';
+        if (this.match(TokenType.IDENTIFIER)) {
+          if (this.previous().lexeme === 'text') {
+            format = 'text';
+          } else if (this.previous().lexeme === 'json') {
+            format = 'json';
+          } else {
+            throw this.error(this.previous(), `Expected 'text' or 'json' after 'as' in fetch.`);
+          }
         } else {
           throw this.error(this.peek(), `Expected 'text' or 'json' after 'as' in fetch.`);
         }
@@ -855,12 +1104,22 @@ class Parser {
         while (this.match(TokenType.NEWLINE)) { } // skip newlines in objects
         if (this.check(TokenType.RIGHT_BRACE)) break; // trailing comma
 
-        const nameToken = this.consume(TokenType.IDENTIFIER, "Expected property name.");
+        let keyName = "";
+        if (this.match(TokenType.IDENTIFIER, TokenType.STRING)) {
+          keyName = this.previous().lexeme;
+          if (this.previous().type === TokenType.STRING) {
+            keyName = keyName.slice(1, -1);
+          }
+        } else {
+          // Allow keywords as property names
+          keyName = this.advance().lexeme;
+        }
+
         this.consume(TokenType.COLON, "Expected ':' after property name.");
         const value = this.parseExpression();
 
         properties.push({
-          key: nameToken.lexeme,
+          key: keyName,
           value,
         });
       } while (this.match(TokenType.COMMA));

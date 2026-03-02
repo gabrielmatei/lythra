@@ -16,6 +16,10 @@ export class Environment {
     this.values.set(name, { value, mutable });
   }
 
+  defineInternal(name: string, value: any): void {
+    this.values.set(name, { value: value as LythraValue, mutable: false });
+  }
+
   get(name: string, node?: ast.Expr): LythraValue {
     if (this.values.has(name)) {
       return this.values.get(name)!.value;
@@ -26,6 +30,16 @@ export class Environment {
     }
 
     throw new RuntimeError(node as ast.Expr, `Undefined variable '${name}'.`);
+  }
+
+  getInternal(name: string): any | undefined {
+    if (this.values.has(name)) {
+      return this.values.get(name)!.value;
+    }
+    if (this.enclosing !== null) {
+      return this.enclosing.getInternal(name);
+    }
+    return undefined;
   }
 
   assign(name: string, value: LythraValue, node: ast.Expr): void {

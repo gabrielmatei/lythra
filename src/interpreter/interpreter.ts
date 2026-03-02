@@ -4,10 +4,12 @@ import { Environment } from './environment.js';
 import { LythraValue, RuntimeError, ReturnEx, HaltEx, AssertionEx, InterpreterInterface, LythraCallable, stringify } from './types.js';
 import { callVision } from '../llm/vision.js';
 import { generateHash, getCache, setCache, clearCache } from '../llm/cache.js';
+import { LythraServerManager } from './server.js';
 
 export class Interpreter implements InterpreterInterface {
   public globals = new Environment();
   private environment = this.globals;
+  public serverManager = new LythraServerManager();
 
   constructor() {
     this.globals.define('log', {
@@ -182,6 +184,99 @@ export class Interpreter implements InterpreterInterface {
       case 'PipelineDeclaration': {
         const fn = new LythraFunction(stmt, this.environment);
         this.environment.define(stmt.name, fn, false);
+        break;
+      }
+      case 'ServerDeclaration': {
+        const portVal = await this.evaluate(stmt.port);
+        if (typeof portVal !== 'number') throw new RuntimeError(stmt.port, "Server port must evaluate to a number.");
+        this.serverManager.registerServer(stmt.name, portVal, stmt);
+        break;
+      }
+      case 'OpenDoorsStatement': {
+        await this.serverManager.openDoors(this);
+        break;
+      }
+      case 'StopStatement': {
+        await this.serverManager.stopServers();
+        break;
+      }
+      case 'TransmitStatement': {
+        const __res = this.environment.getInternal('__res');
+        if (!__res) throw new RuntimeError(stmt as unknown as ast.Expr, "Cannot transmit outside of a server channel context.");
+
+        if (__res.writableEnded) break; // Do not throw, just break execution silently (or optionally throw)
+
+        const payload = await this.evaluate(stmt.data);
+        let status = 200;
+        if (stmt.status) {
+          const statusVal = await this.evaluate(stmt.status);
+          if (typeof statusVal === 'number') status = statusVal;
+        }
+
+        let contentType = 'text/plain';
+        let responseData = '';
+
+        if (typeof payload === 'object' && payload !== null) {
+          contentType = 'application/json';
+          responseData = JSON.stringify(payload);
+        } else {
+          responseData = stringify(payload);
+        }
+
+        __res.writeHead(status, { 'Content-Type': contentType });
+        __res.end(responseData);
+        throw new HaltEx(payload); // Terminate the handler flow after transmit
+      }
+      case 'ReceiveStatement': {
+        const __req = this.environment.getInternal('__req') as any;
+        let __res = this.environment.getInternal('__res') as any;
+        if (!__req) throw new RuntimeError(stmt as unknown as ast.Expr, "Cannot receive outside of a server channel context.");
+
+        const getBody = async (req: any) => {
+          return new Promise<string>((resolve, reject) => {
+            let data = '';
+            req.on('data', (chunk: string) => data += chunk);
+            req.on('end', () => resolve(data));
+            req.on('error', reject);
+          });
+        };
+
+        const bodyStr = await getBody(__req);
+        let parsed: any = bodyStr;
+
+        if (stmt.format === 'json') {
+          try {
+            parsed = JSON.parse(bodyStr);
+          } catch (e) {
+            __res.writeHead(400, { 'Content-Type': 'text/plain' });
+            __res.end('Bad Request - Invalid JSON Body');
+            throw new HaltEx(null);
+          }
+
+          // Primitive Type Assertion via AST ObjectLiteral properties mapping
+          if (stmt.expectedType) {
+            for (const prop of stmt.expectedType.properties) {
+              // VERY crude assert mappings
+              const key = prop.key;
+              if (!(key in parsed)) {
+                __res.writeHead(400, { 'Content-Type': 'text/plain' });
+                __res.end(`Bad Request - Missing field ${key}`);
+                throw new HaltEx(null);
+              }
+              // Destructure directly into the environment
+              this.environment.define(key, parsed[key], false);
+            }
+          } else {
+            this.environment.define(stmt.variableName, parsed, false);
+          }
+        } else {
+          this.environment.define(stmt.variableName, parsed, false);
+        }
+
+        break;
+      }
+      case 'InspectStatement': {
+        // Placeholder for query strings / headers map destructuring extraction
         break;
       }
       default:

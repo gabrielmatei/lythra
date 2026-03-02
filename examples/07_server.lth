@@ -1,0 +1,15 @@
+server MainApi on 4567:
+  channel "/ping":
+    on call GET:
+      transmit "pong"
+      
+  channel "/echo":
+    on call POST:
+      receive body as { message: String }
+      transmit { response: message }
+
+open doors
+
+log "Server running on 4567! Hit http://localhost:4567/ping"
+
+halt
