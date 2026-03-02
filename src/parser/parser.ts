@@ -77,6 +77,7 @@ class Parser {
     if (this.match(TokenType.RECEIVE)) return this.parseReceiveStatement();
     if (this.match(TokenType.INSPECT)) return this.parseInspectStatement();
     if (this.match(TokenType.STOP)) return this.parseStopStatement();
+    if (this.match(TokenType.PARALLEL)) return this.parseParallelBlock();
 
     return this.parseExpressionStatement();
   }
@@ -286,6 +287,22 @@ class Parser {
 
     return {
       kind: 'RememberBlock',
+      body,
+      line: start.line,
+      column: start.column,
+    };
+  }
+
+  private parseParallelBlock(): ast.Stmt {
+    const start = this.previous();
+
+    this.consume(TokenType.COLON, "Expected ':' after 'parallel'.");
+    this.consume(TokenType.NEWLINE, "Expected newline after ':'.");
+
+    const body = this.parseBlock();
+
+    return {
+      kind: 'ParallelBlock',
       body,
       line: start.line,
       column: start.column,

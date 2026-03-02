@@ -140,6 +140,14 @@ export class Interpreter implements InterpreterInterface {
         await this.executeBlock(stmt.body.statements, remEnv);
         break;
       }
+      case 'ParallelBlock': {
+        const parEnv = new Environment(this.environment);
+        // Run all statements concurrently. Each executes within its own isolated child environment 
+        // to prevent sibling variables from randomly bleeding across parallel lines.
+        const promises = stmt.body.statements.map(s => this.executeBlock([s], new Environment(parEnv)));
+        await Promise.all(promises);
+        break;
+      }
       case 'ForgetStatement': {
         if (stmt.target === 'all') {
           clearCache();

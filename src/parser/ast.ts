@@ -406,6 +406,13 @@ export interface StopStatement {
   readonly column: number;
 }
 
+export interface ParallelBlock {
+  readonly kind: 'ParallelBlock';
+  readonly body: Block;
+  readonly line: number;
+  readonly column: number;
+}
+
 // ─── Statement Union ─────────────────────────────────────────────────────────
 
 export type Stmt =
@@ -433,6 +440,7 @@ export type Stmt =
   | ReceiveStatement
   | InspectStatement
   | StopStatement
+  | ParallelBlock
   | ExpressionStatement;
 
 // ─── Program (Root) ──────────────────────────────────────────────────────────

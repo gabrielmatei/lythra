@@ -1,0 +1,22 @@
+# 08_parallel.lth
+# This example demonstrates concurrent execution using the `parallel:` block
+
+let urls = ["https://example.com", "https://example.org", "https://example.net"]
+
+log "Starting parallel vision analysis..."
+
+# The three vision queries below will fire concurrently!
+# Since Vision is I/O network bound, this saves immense execution time compared to sequential polling.
+let desc1 = "pending"
+let desc2 = "pending"
+let desc3 = "pending"
+
+parallel:
+  desc1 = vision<String> "Describe the homepage of {urls[0]} in one sentence."
+  desc2 = vision<String> "Describe the homepage of {urls[1]} in one sentence."
+  desc3 = vision<String> "Describe the homepage of {urls[2]} in one sentence."
+  
+let arr = [desc1, desc2, desc3]
+
+log "Results captured together:"
+log arr
