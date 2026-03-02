@@ -6,6 +6,7 @@ export type DeterminismModifier = 'precise' | 'fuzzy' | 'wild' | null;
 export class Environment {
   private readonly values = new Map<string, { value: LythraValue; mutable: boolean }>();
   public modifier: DeterminismModifier = null;
+  public cacheMode: boolean = false;
 
   constructor(public readonly enclosing: Environment | null = null) { }
 

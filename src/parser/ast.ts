@@ -250,6 +250,20 @@ export interface ModifierBlock {
   readonly column: number;
 }
 
+export interface RememberBlock {
+  readonly kind: 'RememberBlock';
+  readonly body: Block;
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface ForgetStatement {
+  readonly kind: 'ForgetStatement';
+  readonly target: string; // "all" or variable name
+  readonly line: number;
+  readonly column: number;
+}
+
 export interface AttemptStatement {
   readonly kind: 'AttemptStatement';
   readonly attempts: Expr;
@@ -280,6 +294,8 @@ export type Stmt =
   | FnDeclaration
   | PipelineDeclaration
   | ModifierBlock
+  | RememberBlock
+  | ForgetStatement
   | AttemptStatement
   | AssertStatement
   | ExpressionStatement;

@@ -65,12 +65,9 @@ export const enum TokenType {
   TIMEOUT = 'TIMEOUT',
   IMPORT = 'IMPORT',
   EXPORT = 'EXPORT',
-  LOG = 'LOG',
-  HALT = 'HALT',
 
   // ── Keywords — Misc ───────────────────────────────────────────────────────
   WITH = 'WITH',
-  TIMES = 'TIMES',
   OR = 'OR',
   AND = 'AND',
   NOT = 'NOT',
@@ -82,9 +79,14 @@ export const enum TokenType {
   ALL = 'ALL',
   EACH = 'EACH',
   TOKEN = 'TOKEN',
+
+  // ── Native ──────────────────────────────────────────────────────────────
+  LOG = 'LOG',
+  HALT = 'HALT',
   LENGTH = 'LENGTH',
   CONTAINS = 'CONTAINS',
   MATCHES = 'MATCHES',
+  TIMES = 'TIMES',
 
   // ── Operators ─────────────────────────────────────────────────────────────
   EQUAL = 'EQUAL',

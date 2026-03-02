@@ -2,6 +2,7 @@ import * as ast from '../parser/ast.js';
 import { Environment } from './environment.js';
 import { LythraValue, RuntimeError, ReturnEx, HaltEx, AssertionEx, InterpreterInterface, LythraCallable, stringify } from './types.js';
 import { callVision } from '../llm/vision.js';
+import { generateHash, getCache, setCache, clearCache } from '../llm/cache.js';
 
 export class Interpreter implements InterpreterInterface {
   public globals = new Environment();
@@ -124,7 +125,27 @@ export class Interpreter implements InterpreterInterface {
       case 'ModifierBlock': {
         const modEnv = new Environment(this.environment);
         modEnv.modifier = stmt.modifier;
+        // Modifiers also pass down cache context
+        modEnv.cacheMode = this.isCacheEnabled();
         await this.executeBlock(stmt.body.statements, modEnv);
+        break;
+      }
+      case 'RememberBlock': {
+        const remEnv = new Environment(this.environment);
+        remEnv.modifier = this.getActiveModifier();
+        remEnv.cacheMode = true;
+        await this.executeBlock(stmt.body.statements, remEnv);
+        break;
+      }
+      case 'ForgetStatement': {
+        if (stmt.target === 'all') {
+          clearCache();
+        } else {
+          try {
+            const val = await this.evaluate({ kind: 'Identifier', name: stmt.target, line: stmt.line, column: stmt.column } as any);
+            clearCache(val as string);
+          } catch (e) { }
+        }
         break;
       }
       case 'AttemptStatement': {
@@ -280,30 +301,51 @@ export class Interpreter implements InterpreterInterface {
         }
       }
       case 'VisionExpr': {
-        const prompt = stringify(await this.evaluate(expr.prompt));
-        let context: LythraValue = null;
+        const promptVal = await this.evaluate(expr.prompt);
+        let contextVal: LythraValue = null;
         if (expr.context) {
-          context = await this.evaluate(expr.context);
+          contextVal = await this.evaluate(expr.context);
         }
-        let seed: number | 'time' | undefined = undefined;
+
+        let seed: number | 'time' | undefined;
         if (expr.seed) {
           if (expr.seed.kind === 'Identifier' && expr.seed.name === 'time') {
             seed = 'time';
           } else {
-            const s = await this.evaluate(expr.seed);
-            if (typeof s === 'number') seed = s;
+            const evaluatedSeed = await this.evaluate(expr.seed);
+            if (typeof evaluatedSeed === 'number') {
+              seed = evaluatedSeed;
+            }
           }
         }
-        try {
-          return await callVision(prompt, {
-            typeAnnotation: expr.typeAnnotation,
-            context,
-            modifier: this.environment.getModifier(),
-            seed
-          });
-        } catch (e: any) {
-          throw new RuntimeError(expr, e.message);
+
+        const modifier = this.getActiveModifier();
+        const cacheEnabled = this.isCacheEnabled();
+
+        // 1. Generate hash
+        let hash = '';
+        if (cacheEnabled) {
+          hash = generateHash(String(promptVal), contextVal ? stringify(contextVal) : null, expr.typeAnnotation);
+          const cached = getCache(hash);
+          if (cached) {
+            // Already parsed during last execution
+            return JSON.parse(cached.response);
+          }
         }
+
+        const resultValue = await callVision(String(promptVal), {
+          typeAnnotation: expr.typeAnnotation,
+          context: contextVal,
+          seed,
+          modifier
+        });
+
+        // 2. Save hash if caching enabled
+        if (cacheEnabled) {
+          setCache(hash, JSON.stringify(resultValue));
+        }
+
+        return resultValue;
       }
       default:
         throw new Error(`Unexpected expression kind: ${(expr as any).kind}`);
@@ -328,6 +370,24 @@ export class Interpreter implements InterpreterInterface {
     if (typeof value === 'number') return value !== 0;
     if (typeof value === 'string') return value !== '';
     return true;
+  }
+
+  private getActiveModifier(): 'precise' | 'fuzzy' | 'wild' | null {
+    let env: Environment | null = this.environment;
+    while (env !== null) {
+      if (env.modifier !== null) return env.modifier;
+      env = env.enclosing;
+    }
+    return null;
+  }
+
+  private isCacheEnabled(): boolean {
+    let env: Environment | null = this.environment;
+    while (env !== null) {
+      if (env.cacheMode === true) return true;
+      env = env.enclosing;
+    }
+    return false;
   }
 }
 

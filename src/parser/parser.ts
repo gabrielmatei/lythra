@@ -62,6 +62,8 @@ class Parser {
     if (this.match(TokenType.FN)) return this.parseFnDeclaration();
     if (this.match(TokenType.PIPELINE)) return this.parsePipelineDeclaration();
     if (this.match(TokenType.PRECISE, TokenType.FUZZY, TokenType.WILD)) return this.parseModifierBlock();
+    if (this.match(TokenType.REMEMBER)) return this.parseRememberBlock();
+    if (this.match(TokenType.FORGET)) return this.parseForgetStatement();
     if (this.match(TokenType.ATTEMPT)) return this.parseAttemptStatement();
     if (this.match(TokenType.ASSERT)) return this.parseAssertStatement();
 
@@ -261,6 +263,46 @@ class Parser {
       body,
       line: modifierToken.line,
       column: modifierToken.column,
+    };
+  }
+
+  private parseRememberBlock(): ast.Stmt {
+    const start = this.previous();
+    this.consume(TokenType.COLON, "Expected ':' after 'remember'.");
+    this.consume(TokenType.NEWLINE, "Expected newline after ':'.");
+
+    const body = this.parseBlock();
+
+    return {
+      kind: 'RememberBlock',
+      body,
+      line: start.line,
+      column: start.column,
+    };
+  }
+
+  private parseForgetStatement(): ast.Stmt {
+    const start = this.previous();
+
+    // Can be `forget all` or `forget ident`
+    let target = '';
+    if (this.match(TokenType.ALL)) {
+      target = 'all';
+    } else if (this.match(TokenType.IDENTIFIER)) {
+      target = this.previous().lexeme;
+    } else {
+      throw this.error(this.peek(), "Expected 'all' or a variable name after 'forget'.");
+    }
+
+    if (!this.isAtEnd() && !this.check(TokenType.DEDENT)) {
+      this.consume(TokenType.NEWLINE, "Expected newline after forget statement.");
+    }
+
+    return {
+      kind: 'ForgetStatement',
+      target,
+      line: start.line,
+      column: start.column,
     };
   }
 
