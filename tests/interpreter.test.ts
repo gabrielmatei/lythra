@@ -4,31 +4,31 @@ import { parse } from '../src/parser/parser.js';
 import { Interpreter } from '../src/interpreter/interpreter.js';
 import { LythraCallable, LythraValue } from '../src/interpreter/types.js';
 
-function execute(source: string, interpreter = new Interpreter()) {
+async function execute(source: string, interpreter = new Interpreter()) {
   const { tokens, errors: lexErrors } = tokenize(source);
   if (lexErrors.length > 0) throw new Error(`Lex errors: ${lexErrors[0]!.message}`);
 
   const { program, errors: parseErrors } = parse(tokens);
   if (parseErrors.length > 0) throw new Error(`Parse errors: ${parseErrors[0]!.message}`);
 
-  return interpreter.interpret(program);
+  return await interpreter.interpret(program);
 }
 
 describe('Interpreter', () => {
-  it('evaluates built-in log and arithmetic', () => {
+  it('evaluates built-in log and arithmetic', async () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
 
     const code = `
 let x = 10 + 20 * 2
 log x
 `;
-    const result = execute(code);
+    const result = await execute(code);
     expect(result.error).toBeUndefined();
     expect(consoleSpy).toHaveBeenCalledWith('50');
     consoleSpy.mockRestore();
   });
 
-  it('handles strings and boolean logic', () => {
+  it('handles strings and boolean logic', async () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
     const code = `
 let a = "hello " + "world"
@@ -38,23 +38,23 @@ log a
 log b
 log c
 `;
-    execute(code);
+    await execute(code);
     expect(consoleSpy).toHaveBeenNthCalledWith(1, "hello world");
     expect(consoleSpy).toHaveBeenNthCalledWith(2, "false");
     expect(consoleSpy).toHaveBeenNthCalledWith(3, "true");
     consoleSpy.mockRestore();
   });
 
-  it('respects variable mutability', () => {
+  it('respects variable mutability', async () => {
     const code = `
 const x = 10
 x = 20
 `;
-    const result = execute(code);
+    const result = await execute(code);
     expect(result.error).toMatch(/Cannot reassign to constant variable 'x'/);
   });
 
-  it('evaluates control flow (if/else, while)', () => {
+  it('evaluates control flow (if/else, while)', async () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
     const code = `
 let x = 5
@@ -70,7 +70,7 @@ while count < 3:
   log count
   count = count + 1
 `;
-    execute(code);
+    await execute(code);
     expect(consoleSpy).toHaveBeenCalledWith('exact'); // from if
     expect(consoleSpy).toHaveBeenCalledWith('0'); // while loop
     expect(consoleSpy).toHaveBeenCalledWith('1');
@@ -78,7 +78,7 @@ while count < 3:
     consoleSpy.mockRestore();
   });
 
-  it('evaluates functions, scopes and closures', () => {
+  it('evaluates functions, scopes and closures', async () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
     const code = `
 fn makeCounter():
@@ -92,14 +92,14 @@ const c = makeCounter()
 log c()
 log c()
 `;
-    const result = execute(code);
+    const result = await execute(code);
     expect(result.error).toBeUndefined();
     expect(consoleSpy).toHaveBeenNthCalledWith(1, '1');
     expect(consoleSpy).toHaveBeenNthCalledWith(2, '2');
     consoleSpy.mockRestore();
   });
 
-  it('evaluates block scope correctly', () => {
+  it('evaluates block scope correctly', async () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
     const code = `
 let x = "global"
@@ -108,27 +108,27 @@ if true:
   log x
 log x
 `;
-    execute(code);
+    await execute(code);
     expect(consoleSpy).toHaveBeenNthCalledWith(1, 'local');
     expect(consoleSpy).toHaveBeenNthCalledWith(2, 'global');
     consoleSpy.mockRestore();
   });
 
-  it('halts execution immediately', () => {
+  it('halts execution immediately', async () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
     const code = `
 log 1
 halt 99
 log 2
 `;
-    const result = execute(code);
+    const result = await execute(code);
     expect(consoleSpy).toHaveBeenCalledWith('1');
     expect(consoleSpy).not.toHaveBeenCalledWith('2');
     expect(result.halted).toBe(true);
     consoleSpy.mockRestore();
   });
 
-  it('handles objects and arrays', () => {
+  it('handles objects and arrays', async () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
     const code = `
 let user = { name: "Gabriel", age: 30 }
@@ -139,7 +139,7 @@ let list = [1, 2, 3]
 for item in list:
   log item
 `;
-    execute(code);
+    await execute(code);
     expect(consoleSpy).toHaveBeenCalledWith('Gabriel');
     expect(consoleSpy).toHaveBeenCalledWith('1');
     expect(consoleSpy).toHaveBeenCalledWith('2');

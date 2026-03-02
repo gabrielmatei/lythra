@@ -36,7 +36,7 @@ export class LythraRuntime {
   /**
    * Executes the given source code against the persistent interpreter state.
    */
-  public execute(source: string): RuntimeResult {
+  public async execute(source: string): Promise<RuntimeResult> {
     // 1. Lexing
     const { tokens, errors: lexErrors } = tokenize(source);
     if (lexErrors.length > 0) {
@@ -52,7 +52,7 @@ export class LythraRuntime {
     // 3. Execution
     // For REPL convenience, if it's a single expression, we can evaluate it and return the value
     // But since our Lythra spec heavily relies on statements, we'll just run the program.
-    const result = this.interpreter.interpret(program);
+    const result = await this.interpreter.interpret(program);
 
     if (result.error) {
       return { errors: [result.error] };
@@ -66,7 +66,7 @@ export class LythraRuntime {
     // we can return its evaluated value for console output.
     if (program.body.length === 1 && program.body[0]!.kind === 'ExpressionStatement') {
       try {
-        const value = this.interpreter.evaluate(program.body[0].expression);
+        const value = await this.interpreter.evaluate(program.body[0].expression);
         return { value, output: stringify(value) };
       } catch (e) {
         // Ignore evaluation error of the solitary expression if it failed during execution phase above anyway

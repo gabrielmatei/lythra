@@ -106,6 +106,17 @@ export interface ObjectProperty {
   readonly value: Expr;
 }
 
+export interface VisionExpr {
+  readonly kind: 'VisionExpr';
+  readonly typeAnnotation: TypeAnnotation;
+  readonly prompt: Expr;
+  readonly context: Expr | null; // using/from
+  readonly seed: Expr | null;
+  readonly modifiers: readonly string[]; // reserved for inline modifiers if any exist
+  readonly line: number;
+  readonly column: number;
+}
+
 // ─── Expression Union ────────────────────────────────────────────────────────
 
 export type Expr =
@@ -121,7 +132,8 @@ export type Expr =
   | MemberExpr
   | ComputedMemberExpr
   | ArrayLiteral
-  | ObjectLiteral;
+  | ObjectLiteral
+  | VisionExpr;
 
 // ─── Statements ──────────────────────────────────────────────────────────────
 
@@ -230,6 +242,30 @@ export interface ExpressionStatement {
   readonly column: number;
 }
 
+export interface ModifierBlock {
+  readonly kind: 'ModifierBlock';
+  readonly modifier: 'precise' | 'fuzzy' | 'wild';
+  readonly body: Block;
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface AttemptStatement {
+  readonly kind: 'AttemptStatement';
+  readonly attempts: Expr;
+  readonly body: Block;
+  readonly fallback: Stmt | null;
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface AssertStatement {
+  readonly kind: 'AssertStatement';
+  readonly condition: Expr;
+  readonly line: number;
+  readonly column: number;
+}
+
 // ─── Statement Union ─────────────────────────────────────────────────────────
 
 export type Stmt =
@@ -243,6 +279,9 @@ export type Stmt =
   | ReturnStatement
   | FnDeclaration
   | PipelineDeclaration
+  | ModifierBlock
+  | AttemptStatement
+  | AssertStatement
   | ExpressionStatement;
 
 // ─── Program (Root) ──────────────────────────────────────────────────────────
@@ -261,3 +300,6 @@ export interface Param {
 
 // Simple type annotation — will be expanded in Phase 4 for vision<Type>
 export type TypeAnnotation = string;
+
+// In Lythra, type annotations can be literals (e.g. `vision<"spam" | "ok">`)
+// For now, we store the full type string as parsed.

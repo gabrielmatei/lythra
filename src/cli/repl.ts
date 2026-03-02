@@ -21,7 +21,7 @@ export function startRepl() {
 
   rl.prompt();
 
-  rl.on('line', (line: string) => {
+  rl.on('line', async (line: string) => {
     const input = line.trimEnd();
 
     if (input === '.exit' || input === 'quit' || input === 'halt') {
@@ -35,7 +35,7 @@ export function startRepl() {
         // Two newlines evaluate the block
         const code = buffer;
         buffer = '';
-        runCode(runtime, code);
+        await runCode(runtime, code);
         rl.setPrompt('lythra> ');
       } else {
         buffer += line + '\n';
@@ -44,7 +44,7 @@ export function startRepl() {
     } else {
       // Single line execution
       if (input.length > 0) {
-        runCode(runtime, input);
+        await runCode(runtime, input);
       }
     }
 
@@ -55,8 +55,8 @@ export function startRepl() {
   });
 }
 
-function runCode(runtime: LythraRuntime, code: string) {
-  const result = runtime.execute(code);
+async function runCode(runtime: LythraRuntime, code: string) {
+  const result = await runtime.execute(code);
 
   if (result.errors && result.errors.length > 0) {
     for (const err of result.errors) {

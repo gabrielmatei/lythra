@@ -28,6 +28,8 @@ class Lexer {
             this.startColumn = this.column;
             if (this.atLineStart) {
                 this.handleIndentation();
+                if (this.atLineStart)
+                    continue; // blank line or comment line, loop again
                 if (this.isAtEnd())
                     break;
                 this.start = this.current;

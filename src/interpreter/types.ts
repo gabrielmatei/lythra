@@ -15,14 +15,15 @@ export type LythraValue =
 
 export interface LythraCallable {
   readonly arity: number;
-  call(interpreter: InterpreterInterface, args: LythraValue[]): LythraValue;
+  call(interpreter: InterpreterInterface, args: LythraValue[]): Promise<LythraValue>;
   toString(): string;
 }
 
 // Minimal interface for closures/callables to interact with the interpreter
+// minimal Interface for closures
 export interface InterpreterInterface {
-  executeBlock(statements: readonly ast.Stmt[], environment: any): void;
-  evaluate(expr: ast.Expr): LythraValue;
+  executeBlock(statements: readonly ast.Stmt[], environment: any): Promise<void>;
+  evaluate(expr: ast.Expr): Promise<LythraValue>;
 }
 
 export class RuntimeError extends Error {
@@ -43,6 +44,13 @@ export class HaltEx extends Error {
   constructor(public readonly value: LythraValue) {
     super('HaltEx');
     this.name = 'HaltEx';
+  }
+}
+
+export class AssertionEx extends Error {
+  constructor(public readonly message: string) {
+    super(message);
+    this.name = 'AssertionEx';
   }
 }
 

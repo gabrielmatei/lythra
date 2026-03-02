@@ -1,0 +1,40 @@
+# Lythra Phase 4 Demo
+
+# To run this file, you must have GEMINI_API_KEY exported in your shell.
+# try: GEMINI_API_KEY="..." lythra run examples/04_vision.lth
+
+log "=== Testing Basic Vision String ==="
+let greeting = vision<String> "say hello to Lythra in one fun short sentence"
+log greeting
+log ""
+
+log "=== Testing Vision with Context ==="
+let doc = "Lythra is a new programming language building native LLM integration from the ground up."
+let summary = vision<String> "summarize this text in 3 words" using doc
+log summary
+log ""
+
+log "=== Testing Determinism Modifiers ==="
+precise:
+  let pi_approx = vision<Float> "what is the numeric value of pi to 4 decimal places?"
+  log "Precise: " + pi_approx
+
+wild:
+  let story = vision<String> "write a 1 sentence creative story about a robot learning to code"
+  log "Wild: " + story
+
+log ""
+
+log "=== Testing Attempts and Retries ==="
+let num = 0
+attempt 3 times:
+  log "Attempting to generate an even number greater than 10..."
+  num = vision<Int> "give me a random positive even integer between 1 and 20"
+  log "Generated: " + num
+  assert num > 10
+fallback num = -1
+
+if num > 10:
+  log "Success! Validated number: " + num
+else:
+  log "Failed all attempts, fell back to defaults."

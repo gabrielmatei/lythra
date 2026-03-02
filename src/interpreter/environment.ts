@@ -1,8 +1,11 @@
 import { LythraValue, RuntimeError } from './types.js';
 import * as ast from '../parser/ast.js';
 
+export type DeterminismModifier = 'precise' | 'fuzzy' | 'wild' | null;
+
 export class Environment {
   private readonly values = new Map<string, { value: LythraValue; mutable: boolean }>();
+  public modifier: DeterminismModifier = null;
 
   constructor(public readonly enclosing: Environment | null = null) { }
 
@@ -40,5 +43,11 @@ export class Environment {
     }
 
     throw new RuntimeError(node, `Undefined variable '${name}'.`);
+  }
+
+  getModifier(): DeterminismModifier {
+    if (this.modifier !== null) return this.modifier;
+    if (this.enclosing !== null) return this.enclosing.getModifier();
+    return null;
   }
 }

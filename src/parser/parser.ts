@@ -61,6 +61,9 @@ class Parser {
     if (this.match(TokenType.RETURN)) return this.parseReturnStatement();
     if (this.match(TokenType.FN)) return this.parseFnDeclaration();
     if (this.match(TokenType.PIPELINE)) return this.parsePipelineDeclaration();
+    if (this.match(TokenType.PRECISE, TokenType.FUZZY, TokenType.WILD)) return this.parseModifierBlock();
+    if (this.match(TokenType.ATTEMPT)) return this.parseAttemptStatement();
+    if (this.match(TokenType.ASSERT)) return this.parseAssertStatement();
 
     return this.parseExpressionStatement();
   }
@@ -230,6 +233,75 @@ class Parser {
     return {
       kind: 'ReturnStatement',
       value,
+      line: start.line,
+      column: start.column,
+    };
+  }
+
+  private parseModifierBlock(): ast.Stmt {
+    const modifierToken = this.previous();
+    const modifierRaw = modifierToken.lexeme;
+
+    let modifier: 'precise' | 'fuzzy' | 'wild';
+    if (modifierRaw === 'precise' || modifierRaw === 'fuzzy' || modifierRaw === 'wild') {
+      modifier = modifierRaw;
+    } else {
+      this.error(modifierToken, `Unknown determinism modifier '${modifierRaw}'.`);
+      modifier = 'precise'; // fallback for typescript strictness
+    }
+
+    this.consume(TokenType.COLON, `Expected ':' after ${modifier} block.`);
+    this.consume(TokenType.NEWLINE, `Expected newline after ':'.`);
+
+    const body = this.parseBlock();
+
+    return {
+      kind: 'ModifierBlock',
+      modifier,
+      body,
+      line: modifierToken.line,
+      column: modifierToken.column,
+    };
+  }
+
+  private parseAttemptStatement(): ast.Stmt {
+    const start = this.previous();
+
+    // Parse the attempt count (must evaluate to a number)
+    const attempts = this.parseExpression();
+
+    this.consume(TokenType.TIMES, "Expected 'times' after attempt count.");
+    this.consume(TokenType.COLON, "Expected ':' after 'times'.");
+    this.consume(TokenType.NEWLINE, "Expected newline after ':'.");
+
+    const body = this.parseBlock();
+
+    let fallback: ast.Stmt | null = null;
+    if (this.match(TokenType.FALLBACK)) {
+      fallback = this.parseStatement();
+    }
+
+    return {
+      kind: 'AttemptStatement',
+      attempts,
+      body,
+      fallback,
+      line: start.line,
+      column: start.column,
+    };
+  }
+
+  private parseAssertStatement(): ast.Stmt {
+    const start = this.previous();
+    const condition = this.parseExpression();
+
+    if (!this.isAtEnd() && !this.check(TokenType.DEDENT)) {
+      this.consume(TokenType.NEWLINE, "Expected newline after assert statement.");
+    }
+
+    return {
+      kind: 'AssertStatement',
+      condition,
       line: start.line,
       column: start.column,
     };
@@ -561,6 +633,57 @@ class Parser {
     }
     if (this.match(TokenType.IDENTIFIER)) {
       return { kind: 'Identifier', name: this.previous().lexeme, line: this.previous().line, column: this.previous().column };
+    }
+
+    // Phase 4: Vision Call
+    if (this.match(TokenType.VISION)) {
+      const start = this.previous();
+      this.consume(TokenType.LESS, "Expected '<' after 'vision' for type annotation.");
+
+      let typeAnnotation = '';
+      // Very basic type parsing: could be `String`, `Int`, or `"spam" | "ok"`
+      let bCount = 1;
+      while (!this.isAtEnd() && bCount > 0) {
+        if (this.check(TokenType.GREATER)) bCount--;
+        if (this.check(TokenType.LESS)) bCount++;
+        if (bCount > 0) {
+          typeAnnotation += this.advance().lexeme;
+        } else {
+          this.advance(); // consume the >
+        }
+      }
+
+      if (typeAnnotation.trim() === '') {
+        this.error(start, "Expected type annotation after 'vision<'.");
+      }
+
+      const prompt = this.parseExpression(); // This should typically be a string literal, but we allow expressions for interpolation
+
+      let context: ast.Expr | null = null;
+      if (this.match(TokenType.FROM, TokenType.USING)) {
+        context = this.parseExpression();
+      }
+
+      let seed: ast.Expr | null = null;
+      if (this.match(TokenType.SEED)) {
+        if (this.match(TokenType.IDENTIFIER) && this.previous().lexeme === 'time') {
+          // Special literal for seed time
+          seed = { kind: 'Identifier', name: 'time', line: this.previous().line, column: this.previous().column };
+        } else {
+          seed = this.parseExpression();
+        }
+      }
+
+      return {
+        kind: 'VisionExpr',
+        typeAnnotation: typeAnnotation.trim(),
+        prompt,
+        context,
+        seed,
+        modifiers: [],
+        line: start.line,
+        column: start.column
+      };
     }
 
     if (this.match(TokenType.LEFT_PAREN)) {
