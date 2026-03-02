@@ -28,7 +28,7 @@ export class Interpreter implements InterpreterInterface {
     } as LythraCallable, false);
   }
 
-  async interpret(program: ast.Program): Promise<{ error?: string, halted?: boolean }> {
+  async interpret(program: ast.Program): Promise<{ error?: string, runtimeError?: RuntimeError, halted?: boolean }> {
     try {
       for (const stmt of program.body) {
         await this.execute(stmt);
@@ -36,7 +36,7 @@ export class Interpreter implements InterpreterInterface {
       return {};
     } catch (error: any) {
       if (error instanceof HaltEx) return { halted: true };
-      if (error instanceof RuntimeError) return { error: `[line ${error.node.line}] Runtime Error: ${error.message}` };
+      if (error instanceof RuntimeError) return { error: `[line ${error.node.line}] Runtime Error: ${error.message}`, runtimeError: error };
       return { error: `[Internal Error] ${error}` };
     }
   }
@@ -360,7 +360,15 @@ export class Interpreter implements InterpreterInterface {
         if (typeof callee === 'object' && callee !== null && !Array.isArray(callee) && 'call' in callee && typeof callee.call === 'function') {
           const callable = callee as LythraCallable;
           if (args.length !== callable.arity) throw new RuntimeError(expr, `Expected ${callable.arity} arguments but got ${args.length}.`);
-          return await callable.call(this, args);
+          try {
+            return await callable.call(this, args);
+          } catch (e: any) {
+            if (e instanceof RuntimeError) {
+              const calleeName = expr.callee.kind === 'Identifier' ? expr.callee.name : stringify(callee);
+              e.addTrace(calleeName, expr.line, expr.column);
+            }
+            throw e;
+          }
         } else {
           throw new RuntimeError(expr.callee, 'Can only call functions and pipelines.');
         }
@@ -473,8 +481,11 @@ class LythraFunction implements LythraCallable {
     }
     try {
       await interpreter.executeBlock(this.declaration.body.statements, environment);
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof ReturnEx) return error.value;
+      if (error instanceof RuntimeError) {
+        error.addTrace(this.declaration.name, this.declaration.line, this.declaration.column);
+      }
       throw error;
     }
     return null;

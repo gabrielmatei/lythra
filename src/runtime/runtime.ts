@@ -1,7 +1,8 @@
 import { tokenize } from '../lexer/lexer.js';
 import { parse } from '../parser/parser.js';
 import { Interpreter } from '../interpreter/interpreter.js';
-import { LythraValue, stringify } from '../interpreter/types.js';
+import { LythraValue, RuntimeError, stringify } from '../interpreter/types.js';
+import { formatSnippetError } from './errors.js';
 
 export interface RuntimeResult {
   value?: LythraValue;
@@ -22,12 +23,12 @@ export class LythraRuntime {
   public check(source: string): string[] {
     const { tokens, errors: lexErrors } = tokenize(source);
     if (lexErrors.length > 0) {
-      return lexErrors.map(e => `[Lexer] ${e.message}`);
+      return lexErrors.map(e => formatSnippetError(`[Lexer] ${e.message}`, source, e.line, e.column));
     }
 
     const { errors: parseErrors } = parse(tokens);
     if (parseErrors.length > 0) {
-      return parseErrors.map(e => `[Parser] ${e.message}`);
+      return parseErrors.map(e => formatSnippetError(`[Parser] ${e.message}`, source, e.line, e.column));
     }
 
     return [];
@@ -40,39 +41,63 @@ export class LythraRuntime {
     // 1. Lexing
     const { tokens, errors: lexErrors } = tokenize(source);
     if (lexErrors.length > 0) {
-      return { errors: lexErrors.map(e => `[Lexer] ${e.message}`) };
+      return { errors: lexErrors.map(e => formatSnippetError(`[Lexer] ${e.message}`, source, e.line, e.column)) };
     }
 
     // 2. Parsing
     const { program, errors: parseErrors } = parse(tokens);
     if (parseErrors.length > 0) {
-      return { errors: parseErrors.map(e => `[Parser] ${e.message}`) };
+      return { errors: parseErrors.map(e => formatSnippetError(`[Parser] ${e.message}`, source, e.line, e.column)) };
     }
 
     // 3. Execution
-    // For REPL convenience, if it's a single expression, we can evaluate it and return the value
-    // But since our Lythra spec heavily relies on statements, we'll just run the program.
-    const result = await this.interpreter.interpret(program);
+    try {
+      const result = await this.interpreter.interpret(program);
 
-    if (result.error) {
-      return { errors: [result.error] };
-    }
-
-    if (result.halted) {
-      return { halted: true };
-    }
-
-    // Experimental REPL feature: if there was exactly 1 statement and it was an ExpressionStatement, 
-    // we can return its evaluated value for console output.
-    if (program.body.length === 1 && program.body[0]!.kind === 'ExpressionStatement') {
-      try {
-        const value = await this.interpreter.evaluate(program.body[0].expression);
-        return { value, output: stringify(value) };
-      } catch (e) {
-        // Ignore evaluation error of the solitary expression if it failed during execution phase above anyway
+      if (result.error) {
+        if (result.runtimeError) {
+          const formatted = formatSnippetError(
+            `[Runtime] ${result.runtimeError.message}`,
+            source,
+            result.runtimeError.node.line,
+            result.runtimeError.node.column
+          );
+          const traceStr = result.runtimeError.stackTrace.length > 0
+            ? '\nStack Trace:\n' + result.runtimeError.stackTrace.map(t => `  ${t}`).join('\n')
+            : '';
+          return { errors: [formatted + traceStr] };
+        }
+        return { errors: [result.error] };
       }
-    }
 
-    return {};
+      if (result.halted) {
+        return { halted: true };
+      }
+
+      // Experimental REPL feature: if there was exactly 1 statement and it was an ExpressionStatement, 
+      // we can return its evaluated value for console output.
+      if (program.body.length === 1 && program.body[0]!.kind === 'ExpressionStatement') {
+        try {
+          const value = await this.interpreter.evaluate(program.body[0].expression);
+          return { value, output: stringify(value) };
+        } catch (e: any) {
+          if (e instanceof RuntimeError) {
+            const formatted = formatSnippetError(`[Runtime] ${e.message}`, source, e.node.line, e.node.column);
+            const traceStr = e.stackTrace.length > 0 ? '\nStack Trace:\n' + e.stackTrace.map(t => `  ${t}`).join('\n') : '';
+            return { errors: [formatted + traceStr] };
+          }
+          return { errors: [`[Runtime] Internal evaluation error: ${e.message}`] };
+        }
+      }
+
+      return {};
+    } catch (e: any) {
+      if (e instanceof RuntimeError) {
+        const formatted = formatSnippetError(`[Runtime] ${e.message}`, source, e.node.line, e.node.column);
+        const traceStr = e.stackTrace.length > 0 ? '\nStack Trace:\n' + e.stackTrace.map(t => `  ${t}`).join('\n') : '';
+        return { errors: [formatted + traceStr] };
+      }
+      return { errors: [`[Runtime] Execution error: ${e.message}`] };
+    }
   }
 }

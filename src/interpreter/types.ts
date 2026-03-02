@@ -27,9 +27,15 @@ export interface InterpreterInterface {
 }
 
 export class RuntimeError extends Error {
+  public stackTrace: string[] = [];
+
   constructor(public readonly node: ast.Expr | ast.Stmt, message: string) {
     super(message);
     this.name = 'RuntimeError';
+  }
+
+  addTrace(name: string, line: number, column: number) {
+    this.stackTrace.push(`at ${name} (L${line}:${column})`);
   }
 }
 
