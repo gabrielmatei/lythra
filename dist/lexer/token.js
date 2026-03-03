@@ -65,17 +65,8 @@ export const KEYWORDS = new Map([
     ['length', "LENGTH" /* TokenType.LENGTH */],
     ['contains', "CONTAINS" /* TokenType.CONTAINS */],
     ['matches', "MATCHES" /* TokenType.MATCHES */],
-    // Phase 7: Web Server
-    ['server', "SERVER" /* TokenType.SERVER */],
-    ['channel', "CHANNEL" /* TokenType.CHANNEL */],
-    ['on', "ON" /* TokenType.ON */],
-    ['call', "CALL" /* TokenType.CALL */],
-    ['transmit', "TRANSMIT" /* TokenType.TRANSMIT */],
-    ['receive', "RECEIVE" /* TokenType.RECEIVE */],
-    ['inspect', "INSPECT" /* TokenType.INSPECT */],
-    ['filter', "FILTER" /* TokenType.FILTER */],
-    ['open', "OPEN" /* TokenType.OPEN */],
-    ['doors', "DOORS" /* TokenType.DOORS */],
-    ['stop', "STOP" /* TokenType.STOP */],
+    ['starts', "STARTS" /* TokenType.STARTS */],
+    ['ends', "ENDS" /* TokenType.ENDS */],
+    ['map', "MAP" /* TokenType.MAP */],
 ]);
 //# sourceMappingURL=token.js.map

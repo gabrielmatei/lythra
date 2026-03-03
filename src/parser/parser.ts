@@ -79,6 +79,7 @@ class Parser {
     if (this.match(TokenType.STOP)) return this.parseStopStatement();
     if (this.match(TokenType.PARALLEL)) return this.parseParallelBlock();
     if (this.match(TokenType.IMPORT)) return this.parseImportStatement();
+    if (this.match(TokenType.EXPORT)) return this.parseExportStatement();
     if (this.match(TokenType.EMIT)) return this.parseEmitStatement();
     if (this.match(TokenType.STREAM)) return this.parseStreamBlock();
 
@@ -105,7 +106,7 @@ class Parser {
       } while (this.match(TokenType.COMMA));
 
       this.consume(TokenType.RIGHT_BRACE, "Expected '}' after destructured bindings.");
-      name = `{${destructuredNames.join(', ')}}`;
+      name = `{${destructuredNames.join(', ')} } `;
     } else {
       const nameToken = this.consume(TokenType.IDENTIFIER, 'Expected variable name.');
       name = nameToken.lexeme;
@@ -334,21 +335,15 @@ class Parser {
 
   private parseImportStatement(): ast.Stmt {
     const start = this.previous();
+    const path = this.consume(TokenType.STRING, "Expected string path after 'import'.").literal as string;
+    let alias = null;
 
-    let path = "";
-    if (this.match(TokenType.STRING)) {
-      path = this.previous().literal as string;
-    } else {
-      throw this.error(this.peek(), `Expected string literal path after 'import'.`);
-    }
-
-    let alias: string | null = null;
     if (this.match(TokenType.AS)) {
-      alias = this.consume(TokenType.IDENTIFIER, "Expected identifier after 'as' in import.").lexeme;
+      alias = this.consume(TokenType.IDENTIFIER, "Expected identifier after 'as'.").lexeme;
     }
 
     if (!this.isAtEnd() && !this.check(TokenType.DEDENT)) {
-      this.consume(TokenType.NEWLINE, "Expected newline after import statement.");
+      this.consume(TokenType.NEWLINE, 'Expected newline after import statement.');
     }
 
     return {
@@ -356,7 +351,19 @@ class Parser {
       path,
       alias,
       line: start.line,
-      column: start.column,
+      column: start.column
+    };
+  }
+
+  private parseExportStatement(): ast.Stmt {
+    const start = this.previous();
+    const declaration = this.parseStatement();
+    // ExportStatement wraps VarDecl, FnDecl, PipelineDecl etc.
+    return {
+      kind: 'ExportStatement',
+      declaration,
+      line: start.line,
+      column: start.column
     };
   }
 
@@ -630,7 +637,8 @@ class Parser {
 
     let format: 'text' | 'json' = 'json';
     let typeNode: ast.ObjectLiteral | undefined = undefined;
-    let variableName = "text";
+    let variableName: string | null = "text";
+    let destructuredNames: string[] = [];
 
     if (this.match(TokenType.IDENTIFIER)) {
       if (this.previous().lexeme === "text") {
@@ -639,17 +647,25 @@ class Parser {
         if (this.match(TokenType.COLON)) {
           this.consume(TokenType.IDENTIFIER, "Expected 'String' after ':'.");
         }
+      } else if (this.previous().lexeme === "json") {
+        format = "json";
+        variableName = "body";
       } else {
-        throw this.error(this.previous(), "Expected 'text' or json object destructuring after 'as'.");
+        // Assume it's a variable name for the whole body
+        format = "json";
+        variableName = this.previous().lexeme;
       }
     } else {
+      // Must be an object literal for destructuring/schema
       format = "json";
-      variableName = "body";
+      variableName = null;
       const expr = this.parseExpression();
       if (expr.kind === 'ObjectLiteral') {
         typeNode = expr;
+        // Also populate destructuredNames for interpreter consistency if needed
+        destructuredNames = expr.properties.map(p => p.key);
       } else {
-        throw this.error(this.peek(), "Expected object literal for receive schema.");
+        throw this.error(this.peek(), "Expected 'text', 'json', or object literal after 'as' in receive statement.");
       }
     }
 
@@ -661,6 +677,7 @@ class Parser {
       kind: 'ReceiveStatement',
       format,
       variableName,
+      destructuredNames: destructuredNames.length > 0 ? destructuredNames : undefined,
       expectedType: typeNode,
       line: start.line,
       column: start.column
@@ -909,16 +926,31 @@ class Parser {
   }
 
   private parseComparison(): ast.Expr {
-    let expr = this.parseTerm();
+    let expr = this.parseRange();
     // Also use LESS and GREATER for angle brackets in expressions
-    while (this.match(TokenType.LESS, TokenType.GREATER, TokenType.LESS_EQUAL, TokenType.GREATER_EQUAL)) {
+    while (this.match(TokenType.LESS, TokenType.GREATER, TokenType.LESS_EQUAL, TokenType.GREATER_EQUAL, TokenType.IN)) {
       const operator = this.previous().lexeme;
-      const right = this.parseTerm();
+      const right = this.parseRange();
       expr = {
         kind: 'BinaryExpr',
         left: expr,
         operator,
         right,
+        line: expr.line,
+        column: expr.column,
+      };
+    }
+    return expr;
+  }
+
+  private parseRange(): ast.Expr {
+    let expr = this.parseTerm();
+    if (this.match(TokenType.DOT_DOT)) {
+      const end = this.parseTerm();
+      return {
+        kind: 'RangeExpr',
+        start: expr,
+        end,
         line: expr.line,
         column: expr.column,
       };
@@ -967,6 +999,8 @@ class Parser {
       return {
         kind: 'ConsultExpr',
         pipeline: pipelineExpr,
+        args: [],
+        fallback: null,
         line: token.line,
         column: token.column,
       };
@@ -1016,6 +1050,16 @@ class Parser {
           kind: 'NativePropertyExpr',
           object: expr,
           property: 'length',
+          line: expr.line,
+          column: expr.column,
+        };
+      } else if (this.match(TokenType.CONSULT)) {
+        const pipeline = this.parseExpression(); // This handles parsing right side of pipe 
+        expr = {
+          kind: 'ConsultExpr',
+          pipeline,
+          args: [],
+          fallback: null,
           line: expr.line,
           column: expr.column,
         };
@@ -1149,6 +1193,11 @@ class Parser {
       return { kind: 'Identifier', name: this.previous().lexeme, line: this.previous().line, column: this.previous().column };
     }
 
+    // Config is treated similarly to an environment/global access
+    if (this.match(TokenType.CONFIG)) {
+      return { kind: 'Identifier', name: 'config', line: this.previous().line, column: this.previous().column };
+    }
+
     if (this.match(TokenType.ENV)) {
       return { kind: 'EnvAccessExpr', line: this.previous().line, column: this.previous().column };
     }
@@ -1194,6 +1243,26 @@ class Parser {
         context = this.parseExpression();
       }
 
+      let secondaryContext: ast.Expr | null = null;
+      if (this.match(TokenType.WITH)) {
+        secondaryContext = this.parseExpression();
+      }
+
+      let modelOverride: string | null = null;
+      if (this.match(TokenType.MODEL)) {
+        modelOverride = this.consume(TokenType.STRING, "Expected string literal for model override.").literal as string;
+      }
+
+      // Note: temperature could be just a number identifier or a literal in some cases, but the spec says `temperature 1.0`.
+      // The keyword 'temperature' is not yet in our token map! Let's just use IDENTIFIER 'temperature' for now to avoid re-mapping if we don't have to,
+      // or we can add TEMPERATURE to keywords. Wait, we don't have TEMPERATURE in token.ts. 
+      // Let's check if the identifier matches "temperature".
+      let temperatureOverride: number | null = null;
+      if (this.check(TokenType.IDENTIFIER) && this.peek().lexeme === 'temperature') {
+        this.advance(); // consume 'temperature'
+        temperatureOverride = this.consume(TokenType.NUMBER, "Expected number literal for temperature override.").literal as number;
+      }
+
       let seed: ast.Expr | null = null;
       if (this.match(TokenType.SEED)) {
         if (this.match(TokenType.IDENTIFIER) && this.previous().lexeme === 'time') {
@@ -1209,6 +1278,9 @@ class Parser {
         typeAnnotation,
         prompt,
         context,
+        secondaryContext,
+        modelOverride,
+        temperatureOverride,
         seed,
         modifiers: [],
         line: start.line,
@@ -1279,8 +1351,18 @@ class Parser {
           keyName = this.advance().lexeme;
         }
 
-        this.consume(TokenType.COLON, "Expected ':' after property name.");
-        const value = this.parseExpression();
+        let value: ast.Expr;
+        if (this.match(TokenType.COLON)) {
+          value = this.parseExpression();
+        } else {
+          // Shorthand: { id } => { id: id }
+          value = {
+            kind: 'Identifier',
+            name: keyName,
+            line: start.line, // best effort
+            column: start.column,
+          };
+        }
 
         properties.push({
           key: keyName,
@@ -1379,8 +1461,8 @@ class Parser {
 
   private error(token: Token, message: string): string {
     const msg = token.type === TokenType.EOF
-      ? `[line ${token.line}] Error at end: ${message}`
-      : `[line ${token.line}] Error at '${token.lexeme}': ${message}`;
+      ? `[line ${token.line}] Error at end: ${message} `
+      : `[line ${token.line}] Error at '${token.lexeme}': ${message} `;
 
     this.errors.push({
       message,

@@ -116,6 +116,15 @@ export interface CallExpr {
   readonly column: number;
 }
 
+export interface ConsultExpr {
+  readonly kind: 'ConsultExpr';
+  readonly pipeline: Expr;     // e.g. PipelineName
+  readonly args: readonly Expr[];
+  readonly fallback?: Expr | null;
+  readonly line: number;
+  readonly column: number;
+}
+
 export interface MemberExpr {
   readonly kind: 'MemberExpr';
   readonly object: Expr;
@@ -158,6 +167,17 @@ export interface VisionExpr {
   readonly context: Expr | null; // using/from
   readonly seed: Expr | null;
   readonly modifiers: readonly string[]; // reserved for inline modifiers if any exist
+  readonly secondaryContext: Expr | null; // e.g. 'with label'
+  readonly modelOverride: string | null;
+  readonly temperatureOverride: number | null;
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface RangeExpr {
+  readonly kind: 'RangeExpr';
+  readonly start: Expr;
+  readonly end: Expr;
   readonly line: number;
   readonly column: number;
 }
@@ -186,7 +206,8 @@ export type Expr =
   | ArrayLiteral
   | ObjectLiteral
   | VisionExpr
-  | ConsultExpr;
+  | ConsultExpr
+  | RangeExpr;
 
 // ─── Statements ──────────────────────────────────────────────────────────────
 
@@ -388,7 +409,8 @@ export interface TransmitStatement {
 export interface ReceiveStatement {
   readonly kind: 'ReceiveStatement';
   readonly format: 'text' | 'json';
-  readonly variableName: string; // body -> local variable text/json
+  readonly variableName: string | null; // body -> local variable text/json, null if destructured
+  readonly destructuredNames?: readonly string[]; // support `receive body as { name, age }`
   readonly expectedType?: ObjectLiteral; // very basic type assertion via AST
   readonly line: number;
   readonly column: number;
@@ -462,6 +484,13 @@ export interface ConsultExpr {
   readonly column: number;
 }
 
+export interface ExportStatement {
+  readonly kind: 'ExportStatement';
+  readonly declaration: Stmt; // e.g., VarDeclaration, FnDeclaration, PipelineDeclaration
+  readonly line: number;
+  readonly column: number;
+}
+
 // ─── Statement Union ─────────────────────────────────────────────────────────
 
 export type Stmt =
@@ -491,6 +520,7 @@ export type Stmt =
   | StopStatement
   | ParallelBlock
   | ImportStatement
+  | ExportStatement
   | StreamBlock
   | EmitStatement
   | ExpressionStatement;

@@ -223,16 +223,4 @@ export const KEYWORDS: ReadonlyMap<string, TokenType> = new Map<string, TokenTyp
   ['starts', TokenType.STARTS],
   ['ends', TokenType.ENDS],
   ['map', TokenType.MAP],
-  // Phase 7: Web Server
-  ['server', TokenType.SERVER],
-  ['channel', TokenType.CHANNEL],
-  ['on', TokenType.ON],
-  ['call', TokenType.CALL],
-  ['transmit', TokenType.TRANSMIT],
-  ['receive', TokenType.RECEIVE],
-  ['inspect', TokenType.INSPECT],
-  ['filter', TokenType.FILTER],
-  ['open', TokenType.OPEN],
-  ['doors', TokenType.DOORS],
-  ['stop', TokenType.STOP],
 ]);

@@ -5,6 +5,7 @@ export type DeterminismModifier = 'precise' | 'fuzzy' | 'wild' | null;
 
 export class Environment {
   private readonly values = new Map<string, { value: LythraValue; mutable: boolean }>();
+  private readonly exports = new Set<string>();
   public modifier: DeterminismModifier = null;
   public cacheMode: boolean = false;
 
@@ -18,6 +19,10 @@ export class Environment {
 
   defineInternal(name: string, value: any): void {
     this.values.set(name, { value: value as LythraValue, mutable: false });
+  }
+
+  markExported(name: string): void {
+    this.exports.add(name);
   }
 
   get(name: string, node?: ast.Expr): LythraValue {
@@ -69,7 +74,13 @@ export class Environment {
   getAll(): Map<string, LythraValue> {
     const exports = new Map<string, LythraValue>();
     for (const [key, val] of this.values.entries()) {
-      exports.set(key, val.value);
+      if (this.exports.size > 0) {
+        if (this.exports.has(key)) {
+          exports.set(key, val.value);
+        }
+      } else {
+        exports.set(key, val.value); // If nothing was explicitly exported, return everything
+      }
     }
     return exports;
   }

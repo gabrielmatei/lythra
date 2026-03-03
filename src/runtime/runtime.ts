@@ -132,6 +132,7 @@ export class LythraRuntime {
 
     // 3. Execution
     try {
+      await this.interpreter.initConfig(this.basePath);
       const result = await this.interpreter.interpret(program);
 
       if (result.error) {

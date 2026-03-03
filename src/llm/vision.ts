@@ -7,6 +7,7 @@ export interface VisionOptions {
   seed?: number | 'time';
   modifier?: 'precise' | 'fuzzy' | 'wild' | null;
   model?: string;
+  temperature?: number;
 }
 
 export async function callVision(prompt: string, options: VisionOptions): Promise<LythraValue> {
@@ -15,11 +16,15 @@ export async function callVision(prompt: string, options: VisionOptions): Promis
     throw new Error('Vision API Error: GEMINI_API_KEY environment variable is not set.');
   }
 
-  // 1. Resolve Temperature based on modifier
+  // 1. Resolve Temperature based on modifier or explicit override
   let temperature = 0.5; // default
-  if (options.modifier === 'precise') temperature = 0.0;
-  if (options.modifier === 'fuzzy') temperature = 0.7;
-  if (options.modifier === 'wild') temperature = 1.2;
+  if (options.temperature !== undefined && options.temperature !== null) {
+    temperature = options.temperature;
+  } else {
+    if (options.modifier === 'precise') temperature = 0.0;
+    if (options.modifier === 'fuzzy') temperature = 0.7;
+    if (options.modifier === 'wild') temperature = 1.2;
+  }
 
   // 2. Resolve JSON Schema from typeAnnotation
   // We'll support some basic Lythra types mapping to OpenAPI schema types here

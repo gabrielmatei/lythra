@@ -1,4 +1,6 @@
 import * as readline from 'readline/promises';
+import * as path from 'path';
+import * as fs from 'fs';
 import * as ast from '../parser/ast.js';
 import { Environment } from './environment.js';
 import { LythraValue, RuntimeError, ReturnEx, HaltEx, AssertionEx, InterpreterInterface, LythraCallable, stringify } from './types.js';
@@ -34,6 +36,21 @@ export class Interpreter implements InterpreterInterface {
       },
       toString: () => '<builtin fn halt>'
     } as LythraCallable, false);
+  }
+
+  public async initConfig(basePath: string): Promise<void> {
+    const configPath = path.join(basePath, 'lythra.json');
+    let configObj: Record<string, LythraValue> = {};
+    if (fs.existsSync(configPath)) {
+      try {
+        const raw = fs.readFileSync(configPath, 'utf8');
+        configObj = JSON.parse(raw);
+      } catch (e: any) {
+        console.warn(`[Lythra] Failed to parse lythra.json: ${e.message}`);
+      }
+    }
+    // Define `config` as a read-only global object
+    this.globals.define('config', configObj, false);
   }
 
   async interpret(program: ast.Program): Promise<{ error?: string, runtimeError?: RuntimeError, halted?: boolean }> {
@@ -225,6 +242,19 @@ export class Interpreter implements InterpreterInterface {
         await this.serverManager.stopServers();
         break;
       }
+      case 'ExportStatement': {
+        await this.execute(stmt.declaration);
+        // Track exports globally if we need them, though typically the environment contains all top-level defs.
+        // During imports, we pluck everything defined in the child environment.
+        // For strict exports, we flag variables in the environment.
+        const decl = stmt.declaration;
+        if (decl.kind === 'VarDeclaration') {
+          this.environment.markExported(decl.name);
+        } else if (decl.kind === 'FnDeclaration' || decl.kind === 'PipelineDeclaration') {
+          this.environment.markExported(decl.name);
+        }
+        break;
+      }
       case 'TransmitStatement': {
         const __res = this.environment.getInternal('__res');
         if (!__res) throw new RuntimeError(stmt as unknown as ast.Expr, "Cannot transmit outside of a server channel context.");
@@ -291,11 +321,18 @@ export class Interpreter implements InterpreterInterface {
               // Destructure directly into the environment
               this.environment.define(key, parsed[key], false);
             }
-          } else {
+          } else if (stmt.destructuredNames) {
+            // New destructured JSON array matching `receive body as { id, username }`
+            for (const key of stmt.destructuredNames) {
+              this.environment.define(key, parsed[key] ?? null, false);
+            }
+          } else if (stmt.variableName !== null) {
             this.environment.define(stmt.variableName, parsed, false);
           }
         } else {
-          this.environment.define(stmt.variableName, parsed, false);
+          if (stmt.variableName !== null) {
+            this.environment.define(stmt.variableName, parsed, false);
+          }
         }
 
         break;
@@ -330,18 +367,16 @@ export class Interpreter implements InterpreterInterface {
         break;
       }
       case 'ImportStatement': {
-        if (!this.onImport) {
-          throw new RuntimeError(stmt, "Import statements are not supported in this environment.");
-        }
+        if (!this.onImport) throw new RuntimeError(stmt as any, `Imports are not supported in this execution context.`);
 
-        const exports = await this.onImport(stmt.path);
+        const importedModule = await this.onImport(stmt.path);
 
         if (stmt.alias) {
-          // Mount as a namespace object e.g., utils.something
-          this.environment.define(stmt.alias, exports, false);
+          // import "file.lth" as ns (object map)
+          this.environment.define(stmt.alias, importedModule, false);
         } else {
-          // Merge directly into current scope
-          for (const [key, val] of Object.entries(exports)) {
+          // inherit into flat namespace
+          for (const [key, val] of Object.entries(importedModule)) {
             this.environment.define(key, val, false);
           }
         }
@@ -539,6 +574,9 @@ export class Interpreter implements InterpreterInterface {
         throw new RuntimeError(expr.object, 'Only arrays, objects, and strings support bracket properties.');
       }
       case 'UnaryExpr': {
+        if (expr.operator === 'await') {
+          return await this.evaluate(expr.operand);
+        }
         const right = await this.evaluate(expr.operand);
         switch (expr.operator) {
           case '-':
@@ -580,21 +618,46 @@ export class Interpreter implements InterpreterInterface {
               return left / right;
             }
             throw new RuntimeError(expr, 'Operands must be numbers.');
-          case '>':
-            if (typeof left === 'number' && typeof right === 'number') return left > right;
-            throw new RuntimeError(expr, 'Operands must be numbers.');
-          case '>=':
-            if (typeof left === 'number' && typeof right === 'number') return left >= right;
-            throw new RuntimeError(expr, 'Operands must be numbers.');
           case '<':
             if (typeof left === 'number' && typeof right === 'number') return left < right;
+            throw new RuntimeError(expr, 'Operands must be numbers.');
+          case '>':
+            if (typeof left === 'number' && typeof right === 'number') return left > right;
             throw new RuntimeError(expr, 'Operands must be numbers.');
           case '<=':
             if (typeof left === 'number' && typeof right === 'number') return left <= right;
             throw new RuntimeError(expr, 'Operands must be numbers.');
+          case '>=':
+            if (typeof left === 'number' && typeof right === 'number') return left >= right;
+            throw new RuntimeError(expr, 'Operands must be numbers.');
+          case 'in':
+            if (!Array.isArray(right) && typeof right !== 'string') {
+              throw new RuntimeError(expr.right, "'in' operator requires an array or string on the right side.");
+            }
+            if (Array.isArray(right)) {
+              return right.some(item => typeof left === typeof item && left === item);
+            }
+            return right.includes(stringify(left));
           default:
-            throw new RuntimeError(expr, `Unknown operator '${expr.operator}'.`);
+            throw new RuntimeError(expr, `Unknown binary operator '${expr.operator}'.`);
         }
+      }
+      case 'RangeExpr': {
+        const start = await this.evaluate(expr.start);
+        const end = await this.evaluate(expr.end);
+
+        if (typeof start !== 'number' || typeof end !== 'number') {
+          throw new RuntimeError(expr, 'Range bounds must evaluate to numbers.');
+        }
+
+        const arr: number[] = [];
+        if (start <= end) {
+          for (let i = start; i <= end; i++) arr.push(i);
+        } else {
+          // Count down cleanly
+          for (let i = start; i >= end; i--) arr.push(i);
+        }
+        return arr;
       }
       case 'CallExpr': {
         const callee = await this.evaluate(expr.callee);
@@ -622,6 +685,17 @@ export class Interpreter implements InterpreterInterface {
         let contextVal: LythraValue = null;
         if (expr.context) {
           contextVal = await this.evaluate(expr.context);
+        }
+
+        let mergedContext = contextVal;
+        if (expr.secondaryContext) {
+          const secondVal = await this.evaluate(expr.secondaryContext);
+          // Combine primary and secondary contexts as a tuple string or object array if both exist
+          if (mergedContext) {
+            mergedContext = `[Context 1]:\n${stringify(mergedContext)}\n\n[Context 2]:\n${stringify(secondVal)}`;
+          } else {
+            mergedContext = secondVal;
+          }
         }
 
         let seed: number | 'time' | undefined;
@@ -652,10 +726,11 @@ export class Interpreter implements InterpreterInterface {
 
         const resultValue = await callVision(String(promptVal), {
           typeAnnotation: expr.typeAnnotation,
-          context: contextVal,
+          context: mergedContext,
           seed,
           modifier,
-          model: this.environment.getInternal('__model') as string | undefined
+          model: expr.modelOverride || (this.environment.getInternal('__model') as string | undefined),
+          temperature: expr.temperatureOverride || undefined
         });
 
         // 2. Save hash if caching enabled
@@ -669,7 +744,18 @@ export class Interpreter implements InterpreterInterface {
         // consult is an explicit pipeline invocation modifier
         // e.g. consult Summarize("...")
         // Syntactically it just evaluates the underlying CallExpr
-        return await this.evaluate(expr.pipeline);
+        try {
+          return await this.evaluate(expr.pipeline);
+        } catch (e: any) {
+          // If we hit an error (e.g. Vision API error, halt, assertion fail) and have a fallback block, execute it instead!
+          if (expr.fallback) {
+            // Note: expr.fallback could be a block {} which evaluates as an ObjectLiteral or something similar depending on syntax.
+            // Wait, we mapped fallback as an Expr. If they use a block {}, it's parsed as an ObjectLiteral.
+            // If they use a function call, it's a CallExpr. Either way, evaluate it and return its value.
+            return await this.evaluate(expr.fallback);
+          }
+          throw e; // Bubble up if no fallback specified
+        }
       }
       default:
         throw new Error(`Unexpected expression kind: ${(expr as any).kind}`);
