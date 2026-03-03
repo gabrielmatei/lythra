@@ -1,7 +1,8 @@
 import { LythraValue } from '../interpreter/types.js';
+import * as ast from '../parser/ast.js';
 
 export interface VisionOptions {
-  typeAnnotation: string;
+  typeAnnotation: ast.TypeAnnotation;
   context?: LythraValue;
   seed?: number | 'time';
   modifier?: 'precise' | 'fuzzy' | 'wild' | null;
@@ -90,26 +91,39 @@ export async function callVision(prompt: string, options: VisionOptions): Promis
 /**
  * Very rudimentary type converter from Lythra syntax to Gemini JSON Schema
  */
-function translateLythraTypeToSchema(typeStr: string): any {
-  if (typeStr === 'String') return { type: 'STRING' };
-  if (typeStr === 'Int' || typeStr === 'Float') return { type: 'NUMBER' };
-  if (typeStr === 'Boolean') return { type: 'BOOLEAN' };
-  if (typeStr === 'String[]') return { type: 'ARRAY', items: { type: 'STRING' } };
-  if (typeStr === 'Int[]' || typeStr === 'Float[]') return { type: 'ARRAY', items: { type: 'NUMBER' } };
-
-  if (typeStr === 'Object') {
-    return { type: 'OBJECT' };
+export function translateLythraTypeToSchema(typeExpr: ast.TypeAnnotation): any {
+  if (typeExpr.kind === 'PlainTypeAnnotation') {
+    const name = typeExpr.name;
+    if (name === 'String') return { type: 'STRING' };
+    if (name === 'Int') return { type: 'INTEGER' };
+    if (name === 'Float') return { type: 'NUMBER' };
+    if (name === 'Boolean') return { type: 'BOOLEAN' };
+    if (name === 'Object') return { type: 'OBJECT' };
+    return { type: 'STRING' };
   }
 
-  // Handle `"spam" | "ok"` basic enum
-  if (typeStr.includes('|')) {
-    const opts = typeStr.split('|').map(s => s.trim().replace(/^"|"$/g, '').replace(/^'|'$/g, ''));
+  if (typeExpr.kind === 'ArrayTypeAnnotation') {
     return {
-      type: 'STRING',
-      enum: opts
+      type: 'ARRAY',
+      items: translateLythraTypeToSchema(typeExpr.element)
     };
   }
 
-  // Default to treating as raw object or string if unknown
+  if (typeExpr.kind === 'UnionTypeAnnotation') {
+    return {
+      type: 'STRING',
+      enum: typeExpr.variants
+    };
+  }
+
+  if (typeExpr.kind === 'ConstrainedTypeAnnotation') {
+    const base = translateLythraTypeToSchema({ kind: 'PlainTypeAnnotation', name: typeExpr.base });
+    if (base.type === 'STRING' || base.type === 'INTEGER' || base.type === 'NUMBER') {
+      if (typeExpr.constraints['max'] !== undefined) base.maxLength = typeExpr.constraints['max'];
+      if (typeExpr.constraints['min'] !== undefined) base.minLength = typeExpr.constraints['min'];
+    }
+    return base;
+  }
+
   return { type: 'STRING' };
 }

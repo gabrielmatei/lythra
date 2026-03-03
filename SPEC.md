@@ -42,18 +42,12 @@ Lythra is built on four principles:
 
 A Lythra program is a `.lth` file. Top-level constructs are:
 
-- `config` blocks (global settings)
 - `pipeline` definitions (named data flows)
 - `server` blocks (web server entry points)
 - `fn` definitions (pure helper functions)
 - Bare statements (executed top to bottom as a script)
 
 ```lythra
-config:
-  model: "gpt-4o"
-  cache: on
-  seed: 42
-
 pipeline Greet(name: String) -> String:
   result = vision<String> "say hello to {name}" warmly
   return result
@@ -128,10 +122,6 @@ server MyApp on 3000:
 
 | Keyword | Purpose |
 |---|---|
-| `config` | Global configuration block |
-| `model` | Set the LLM model |
-| `cache` | Enable/disable result caching |
-| `timeout` | Set max wait time for LLM calls |
 | `import` | Import another `.lth` file or module |
 | `export` | Export a pipeline or function |
 | `log` | Write to stdout |
@@ -532,25 +522,14 @@ pipeline Chat(history: Object[], message: String) -> String:
 
 ## Configuration
 
-The `config` block sets global defaults. Can be overridden per `vision` call.
+Lythra reads global defaults from a `lythra.json` file in the current working directory.
 
-```lythra
-config:
-  model: "gpt-4o"           # LLM model to use
-  cache: on                  # Cache vision calls by default
-  seed: 42                   # Global seed (use `seed: time` for random)
-  timeout: 30                # Seconds before a vision call times out
-  retries: 3                 # Default retry count for attempt blocks
-  temperature: 0             # Default temperature (0 = precise)
-  log_level: "info"          # "debug" | "info" | "warn" | "error"
-```
-
-### Environment Variables
-
-```lythra
-config:
-  model: env.LYTHRA_MODEL or "gpt-4o"
-  api_key: env.LYTHRA_API_KEY
+```json
+{
+  "model": "gpt-4o",
+  "cache": true,
+  "timeout": 30
+}
 ```
 
 ### Per-Call Overrides
@@ -566,11 +545,6 @@ let result = vision<String> "write a haiku" model "gpt-3.5-turbo" temperature 1.
 ### Example 1: Email Classifier (Script)
 
 ```lythra
-config:
-  model: "gpt-4o"
-  cache: on
-  seed: 42
-
 let emails = [
   "Buy cheap meds now!!!",
   "Meeting at 3pm tomorrow",
@@ -600,10 +574,6 @@ for email in emails:
 ### Example 2: Content Pipeline
 
 ```lythra
-config:
-  model: "gpt-4o"
-  cache: on
-
 pipeline ProcessArticle(url: String) -> Object:
 
   # Fetch the article text (built-in)
@@ -647,11 +617,6 @@ log result
 ### Example 3: Web Server with AI Endpoints
 
 ```lythra
-config:
-  model: "gpt-4o"
-  cache: on
-  seed: 42
-
 pipeline Moderate(text: String) -> Object:
   precise:
     let safe     = vision<Boolean> "is this content safe for all audiences?" from text
@@ -715,10 +680,6 @@ open doors
 ### Example 4: CLI Chatbot
 
 ```lythra
-config:
-  model: "gpt-4o"
-  temperature: 0.7
-
 let history: Object[] = []
 let systemPrompt = "You are a helpful, concise assistant."
 
@@ -753,7 +714,7 @@ Lythra uses two file extensions:
 | Extension | Purpose |
 |---|---|
 | `.lth` | Source files — all Lythra code |
-| `.lthx` | Project config — dependencies, model settings, environment |
+| `lythra.json` | Project config — dependencies, model settings, environment |
 
 ### Source Files (`.lth`)
 
@@ -764,26 +725,27 @@ pipelines/summarize.lth
 pipelines/moderate.lth
 ```
 
-### Project Config (`.lthx`)
+### Project Config (`lythra.json`)
 
-The `.lthx` file lives at the root of your project, similar to `package.json` in Node or `pyproject.toml` in Python.
+The `lythra.json` file lives at the root of your project, similar to `package.json` in Node or `pyproject.toml` in Python.
 
-```lthx
-name: "my-lythra-app"
-version: "0.1.0"
-entry: "main.lth"
-
-model: "gpt-4o"
-cache: on
-seed: 42
-
-dependencies:
-  lythra-http: "^1.0.0"
-  lythra-db: "^0.3.0"
-
-env:
-  required: ["LYTHRA_API_KEY"]
-  optional: ["PORT", "LOG_LEVEL"]
+```json
+{
+  "name": "my-lythra-app",
+  "version": "0.1.0",
+  "entry": "main.lth",
+  "model": "gpt-4o",
+  "cache": true,
+  "seed": 42,
+  "dependencies": {
+    "lythra-http": "^1.0.0",
+    "lythra-db": "^0.3.0"
+  },
+  "env": {
+    "required": ["LYTHRA_API_KEY"],
+    "optional": ["PORT", "LOG_LEVEL"]
+  }
+}
 ```
 
 ---

@@ -53,7 +53,7 @@ describe('Parser', () => {
     expect(decl.kind).toBe('VarDeclaration');
     expect(decl.name).toBe('x');
     expect(decl.mutable).toBe(true);
-    expect(decl.typeAnnotation).toBe('Int');
+    expect(decl.typeAnnotation).toEqual({ kind: 'PlainTypeAnnotation', name: 'Int' });
 
     const assign = program.body[1] as ast.Assignment;
     expect(assign.kind).toBe('Assignment');

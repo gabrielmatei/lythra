@@ -79,22 +79,43 @@ class Parser {
     if (this.match(TokenType.STOP)) return this.parseStopStatement();
     if (this.match(TokenType.PARALLEL)) return this.parseParallelBlock();
     if (this.match(TokenType.IMPORT)) return this.parseImportStatement();
+    if (this.match(TokenType.EMIT)) return this.parseEmitStatement();
+    if (this.match(TokenType.STREAM)) return this.parseStreamBlock();
 
     return this.parseExpressionStatement();
   }
 
   private parseVarDeclaration(): ast.Stmt {
     const mutable = this.previous().type === TokenType.LET;
-    const nameToken = this.consume(TokenType.IDENTIFIER, 'Expected variable name.');
+
+    let name = '';
+    let destructuredNames: string[] | undefined = undefined;
+    let line = 0;
+    let column = 0;
+
+    if (this.match(TokenType.LEFT_BRACE)) {
+      destructuredNames = [];
+      const braceTok = this.previous();
+      line = braceTok.line;
+      column = braceTok.column;
+
+      do {
+        const id = this.consume(TokenType.IDENTIFIER, 'Expected property name in destructuring.');
+        destructuredNames.push(id.lexeme);
+      } while (this.match(TokenType.COMMA));
+
+      this.consume(TokenType.RIGHT_BRACE, "Expected '}' after destructured bindings.");
+      name = `{${destructuredNames.join(', ')}}`;
+    } else {
+      const nameToken = this.consume(TokenType.IDENTIFIER, 'Expected variable name.');
+      name = nameToken.lexeme;
+      line = nameToken.line;
+      column = nameToken.column;
+    }
 
     let typeAnnotation: ast.TypeAnnotation | null = null;
     if (this.match(TokenType.COLON)) {
-      let typeStr = this.consume(TokenType.IDENTIFIER, 'Expected type name.').lexeme;
-      if (this.match(TokenType.LEFT_BRACKET)) {
-        this.consume(TokenType.RIGHT_BRACKET, "Expected ']' after array type.");
-        typeStr += '[]';
-      }
-      typeAnnotation = typeStr;
+      typeAnnotation = this.parseTypeAnnotation();
     }
 
     this.consume(TokenType.EQUAL, "Expected '=' after variable name.");
@@ -106,12 +127,13 @@ class Parser {
 
     return {
       kind: 'VarDeclaration',
-      name: nameToken.lexeme,
+      name,
+      destructuredNames,
       mutable,
       typeAnnotation,
       initializer,
-      line: nameToken.line,
-      column: nameToken.column,
+      line,
+      column,
     };
   }
 
@@ -418,7 +440,7 @@ class Parser {
 
     let returnType: ast.TypeAnnotation | null = null;
     if (this.match(TokenType.ARROW)) {
-      returnType = this.consume(TokenType.IDENTIFIER, "Expected return type.").lexeme;
+      returnType = this.parseTypeAnnotation();
     }
 
     this.consume(TokenType.COLON, "Expected ':' before function body.");
@@ -447,7 +469,7 @@ class Parser {
 
     let returnType: ast.TypeAnnotation | null = null;
     if (this.match(TokenType.ARROW)) {
-      returnType = this.consume(TokenType.IDENTIFIER, "Expected return type.").lexeme;
+      returnType = this.parseTypeAnnotation();
     }
 
     this.consume(TokenType.COLON, "Expected ':' before pipeline body.");
@@ -705,7 +727,7 @@ class Parser {
         const paramName = this.consume(TokenType.IDENTIFIER, "Expected parameter name.");
         let typeAnnotation: ast.TypeAnnotation | null = null;
         if (this.match(TokenType.COLON)) {
-          typeAnnotation = this.consume(TokenType.IDENTIFIER, "Expected parameter type.").lexeme;
+          typeAnnotation = this.parseTypeAnnotation();
         }
         params.push({ name: paramName.lexeme, type: typeAnnotation });
       } while (this.match(TokenType.COMMA));
@@ -769,6 +791,64 @@ class Parser {
       line: expr.line,
       column: expr.column,
     };
+  }
+
+  // ─── Type Annotation Parsing ───
+
+  private parseTypeAnnotation(): ast.TypeAnnotation {
+    let annotation: ast.TypeAnnotation;
+
+    if (this.match(TokenType.STRING)) {
+      // Union Enum parsing: "A" | "B" | "C"
+      const variants = [this.previous().literal as string];
+      while (this.match(TokenType.PIPE)) {
+        const nextVariant = this.consume(TokenType.STRING, "Expected string literal in union type.");
+        variants.push(nextVariant.literal as string);
+      }
+      annotation = {
+        kind: 'UnionTypeAnnotation',
+        variants
+      };
+    } else {
+      // Identifier base type
+      const identifier = this.consume(TokenType.IDENTIFIER, "Expected type name or string literal.");
+      let base = identifier.lexeme;
+
+      // Check for constraints: String(max: 100)
+      if (this.match(TokenType.LEFT_PAREN)) {
+        const constraints: Record<string, number> = {};
+        if (!this.check(TokenType.RIGHT_PAREN)) {
+          do {
+            const constraintName = this.consume(TokenType.IDENTIFIER, "Expected constraint name (e.g., 'max', 'min').");
+            this.consume(TokenType.COLON, "Expected ':' after constraint name.");
+            const constraintValue = this.consume(TokenType.NUMBER, "Expected numeric literal for constraint.");
+            constraints[constraintName.lexeme] = constraintValue.literal as number;
+          } while (this.match(TokenType.COMMA));
+        }
+        this.consume(TokenType.RIGHT_PAREN, "Expected ')' after constraints.");
+        annotation = {
+          kind: 'ConstrainedTypeAnnotation',
+          base,
+          constraints
+        };
+      } else {
+        annotation = {
+          kind: 'PlainTypeAnnotation',
+          name: base
+        };
+      }
+    }
+
+    // Array type suffix: []
+    while (this.match(TokenType.LEFT_BRACKET)) {
+      this.consume(TokenType.RIGHT_BRACKET, "Expected ']' after '[' in array type.");
+      annotation = {
+        kind: 'ArrayTypeAnnotation',
+        element: annotation
+      };
+    }
+
+    return annotation;
   }
 
   // ─── Expressions (Precedence Climbing) ─────────────────────────────────────
@@ -881,6 +961,16 @@ class Parser {
   }
 
   private parseUnary(): ast.Expr {
+    if (this.match(TokenType.CONSULT)) {
+      const token = this.previous();
+      const pipelineExpr = this.parseCall(); // Usually an invocation like `Summarize(text)`
+      return {
+        kind: 'ConsultExpr',
+        pipeline: pipelineExpr,
+        line: token.line,
+        column: token.column,
+      };
+    }
     if (this.match(TokenType.MINUS, TokenType.NOT)) {
       const token = this.previous();
       const operator = token.lexeme;
@@ -945,6 +1035,48 @@ class Parser {
           kind: 'NativeMethodExpr',
           object: expr,
           method: 'matches',
+          argument,
+          line: expr.line,
+          column: expr.column,
+        };
+      } else if (this.match(TokenType.STARTS)) {
+        this.consume(TokenType.WITH, "Expected 'with' after 'starts'.");
+        const argument = this.parseExpression();
+        expr = {
+          kind: 'NativeMethodExpr',
+          object: expr,
+          method: 'starts with',
+          argument,
+          line: expr.line,
+          column: expr.column,
+        };
+      } else if (this.match(TokenType.ENDS)) {
+        this.consume(TokenType.WITH, "Expected 'with' after 'ends'.");
+        const argument = this.parseExpression();
+        expr = {
+          kind: 'NativeMethodExpr',
+          object: expr,
+          method: 'ends with',
+          argument,
+          line: expr.line,
+          column: expr.column,
+        };
+      } else if (this.match(TokenType.MAP)) {
+        const argument = this.parseExpression();
+        expr = {
+          kind: 'NativeMethodExpr',
+          object: expr,
+          method: 'map',
+          argument,
+          line: expr.line,
+          column: expr.column,
+        };
+      } else if (this.match(TokenType.FILTER)) {
+        const argument = this.parseExpression();
+        expr = {
+          kind: 'NativeMethodExpr',
+          object: expr,
+          method: 'filter',
           argument,
           line: expr.line,
           column: expr.column,
@@ -1052,22 +1184,8 @@ class Parser {
       const start = this.previous();
       this.consume(TokenType.LESS, "Expected '<' after 'vision' for type annotation.");
 
-      let typeAnnotation = '';
-      // Very basic type parsing: could be `String`, `Int`, or `"spam" | "ok"`
-      let bCount = 1;
-      while (!this.isAtEnd() && bCount > 0) {
-        if (this.check(TokenType.GREATER)) bCount--;
-        if (this.check(TokenType.LESS)) bCount++;
-        if (bCount > 0) {
-          typeAnnotation += this.advance().lexeme;
-        } else {
-          this.advance(); // consume the >
-        }
-      }
-
-      if (typeAnnotation.trim() === '') {
-        this.error(start, "Expected type annotation after 'vision<'.");
-      }
+      const typeAnnotation = this.parseTypeAnnotation();
+      this.consume(TokenType.GREATER, "Expected '>' after type annotation.");
 
       const prompt = this.parseExpression(); // This should typically be a string literal, but we allow expressions for interpolation
 
@@ -1088,7 +1206,7 @@ class Parser {
 
       return {
         kind: 'VisionExpr',
-        typeAnnotation: typeAnnotation.trim(),
+        typeAnnotation,
         prompt,
         context,
         seed,
@@ -1179,6 +1297,44 @@ class Parser {
       properties,
       line: start.line,
       column: start.column,
+    };
+  }
+
+
+
+  private parseEmitStatement(): ast.Stmt {
+    const start = this.previous();
+    // emit each token
+    if (this.match(TokenType.IDENTIFIER) && this.previous().lexeme === 'each') {
+      // Ignore "each" keyword fluff optionally used in stream block tokens
+    }
+    const value = this.parseExpression();
+    return {
+      kind: 'EmitStatement',
+      value,
+      line: start.line,
+      column: start.column
+    };
+  }
+
+  private parseStreamBlock(): ast.Stmt {
+    const start = this.previous();
+    const pipelineCall = this.parseExpression(); // StreamStory(prompt)
+    let iteratorName = 'token'; // default variable
+    if (this.match(TokenType.AS)) {
+      iteratorName = this.consume(TokenType.IDENTIFIER, "Expected identifier after 'as' in stream block.").lexeme;
+    }
+    this.consume(TokenType.COLON, "Expected ':' after stream expression.");
+    this.consume(TokenType.NEWLINE, "Expected newline after ':'.");
+    const body = this.parseBlock();
+    // Assume blocks inside emit implicitly to loop scope
+    return {
+      kind: 'StreamBlock',
+      pipelineCall,
+      iteratorName,
+      body,
+      line: start.line,
+      column: start.column
     };
   }
 

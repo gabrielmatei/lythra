@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { createHash } from 'crypto';
 import { LythraValue } from '../interpreter/types.js';
+import * as ast from '../parser/ast.js';
 
 const CACHE_FILE = path.join(process.cwd(), '.lythra', 'cache.json');
 
@@ -14,7 +15,7 @@ export interface CacheEntry {
 /**
  * Generates a deterministic SHA-256 hash for a specific vision execution
  */
-export function generateHash(prompt: string, context: string | null, typeAnnotation: string, modelOverride?: string): string {
+export function generateHash(prompt: string, context: string | null, typeAnnotation: ast.TypeAnnotation, modelOverride?: string): string {
   const payload = JSON.stringify({
     prompt,
     context,

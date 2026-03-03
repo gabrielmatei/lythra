@@ -94,6 +94,26 @@ export class LythraServer {
           requestEnv.defineInternal('__res', res);
 
           try {
+            // 1. Execute matching filters
+            for (const filter of this.filters) {
+              let matches = false;
+              if (filter.pathPattern === 'all') {
+                matches = true;
+              } else if (filter.pathPattern.endsWith('/*')) {
+                const prefix = filter.pathPattern.slice(0, -2); // Remove /*
+                if (url === prefix || url.startsWith(prefix + '/')) {
+                  matches = true;
+                }
+              } else {
+                matches = url === filter.pathPattern;
+              }
+
+              if (matches) {
+                await requestInterpreter.executeBlock(filter.body.statements, requestEnv);
+              }
+            }
+
+            // 2. Execute main handler
             await requestInterpreter.executeBlock(matchedHandler.body.statements, requestEnv);
             // If the handler completes without calling transmit, end it safely
             if (!res.writableEnded) {

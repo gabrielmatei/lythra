@@ -9,6 +9,9 @@ import { LythraServerManager } from './server.js';
 export class Interpreter implements InterpreterInterface {
   public globals = new Environment();
   private environment = this.globals;
+
+  // Pipeline Stream Handling
+  private streamObservers: ((value: LythraValue) => void)[] = [];
   public serverManager = new LythraServerManager();
 
   // Callback injected by LythraRuntime to handle cross-file FS imports
@@ -61,7 +64,18 @@ export class Interpreter implements InterpreterInterface {
       case 'VarDeclaration': {
         let value: LythraValue = null;
         if (stmt.initializer) value = await this.evaluate(stmt.initializer);
-        this.environment.define(stmt.name, value, stmt.mutable);
+
+        if (stmt.destructuredNames) {
+          if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+            throw new RuntimeError(stmt as any, 'Can only destructure objects.');
+          }
+          const rec = value as Record<string, LythraValue>;
+          for (const name of stmt.destructuredNames) {
+            this.environment.define(name, rec[name] ?? null, stmt.mutable);
+          }
+        } else {
+          this.environment.define(stmt.name, value, stmt.mutable);
+        }
         break;
       }
       case 'Assignment': {
@@ -287,7 +301,32 @@ export class Interpreter implements InterpreterInterface {
         break;
       }
       case 'InspectStatement': {
-        // Placeholder for query strings / headers map destructuring extraction
+        const __req = this.environment.getInternal('__req') as any;
+        if (!__req) throw new RuntimeError(stmt as unknown as ast.Expr, "Cannot inspect outside of a server channel context.");
+
+        let sourceData: Record<string, string | undefined> = {};
+        if (stmt.target === 'headers') {
+          sourceData = __req.headers;
+        } else if (stmt.target === 'params') {
+          // Placeholder for URL params (requires router path parsing in server.ts)
+          // For now, we'll extract query string as a fallback
+          const urlObj = new URL(__req.url, `http://${__req.headers.host}`);
+          for (const [key, value] of urlObj.searchParams.entries()) {
+            sourceData[key] = value;
+          }
+          // We also merge __params if injected by server.ts router
+          const __params = this.environment.getInternal('__params') as any;
+          if (__params) {
+            Object.assign(sourceData, __params);
+          }
+        }
+
+        // Destructure into environment with null fallbacks
+        for (const prop of stmt.expectedType.properties) {
+          const key = prop.key;
+          const value = sourceData[key.toLowerCase()] ?? sourceData[key] ?? null; // lowercase handles Node HTTP headers mostly
+          this.environment.define(key, value, false);
+        }
         break;
       }
       case 'ImportStatement': {
@@ -305,6 +344,50 @@ export class Interpreter implements InterpreterInterface {
           for (const [key, val] of Object.entries(exports)) {
             this.environment.define(key, val, false);
           }
+        }
+        break;
+      }
+      case 'EmitStatement': {
+        const val = await this.evaluate(stmt.value);
+        if (this.streamObservers.length > 0) {
+          const currentObserver = this.streamObservers[this.streamObservers.length - 1];
+          if (currentObserver) {
+            await currentObserver(val);
+          }
+        }
+        break;
+      }
+      case 'StreamBlock': {
+        // Evaluate pipeline using a stream observer hook
+        // stream StreamStory("prompt") as token: ...
+
+        let loopHalt = false;
+        const observer = async (val: LythraValue) => {
+          if (loopHalt) return;
+          const streamEnv = new Environment(this.environment);
+          streamEnv.define(stmt.iteratorName, val, false);
+
+          try {
+            const previousEnv = this.environment;
+            this.environment = streamEnv;
+            // Execute loop body directly (non-blocking for the emit context, or blocking depending on flow)
+            for (const bodyStmt of stmt.body.statements) {
+              await this.execute(bodyStmt);
+            }
+            this.environment = previousEnv;
+          } catch (e: any) {
+            // Unhandled exceptions inside the stream block cancel the stream pipeline
+            loopHalt = true;
+            throw e;
+          }
+        };
+
+        this.streamObservers.push(observer);
+        try {
+          // This evaluates the pipeline, triggering `emit` which fires the observer synchronously in our single thread
+          await this.evaluate(stmt.pipelineCall);
+        } finally {
+          this.streamObservers.pop();
         }
         break;
       }
@@ -399,6 +482,43 @@ export class Interpreter implements InterpreterInterface {
           } catch (e: any) {
             throw new RuntimeError(expr.argument, `Invalid regex: ${e.message}`);
           }
+        }
+
+        if (expr.method === 'starts with') {
+          if (typeof obj !== 'string') throw new RuntimeError(expr.object, `'starts with' is only available on strings.`);
+          return obj.startsWith(stringify(arg));
+        }
+
+        if (expr.method === 'ends with') {
+          if (typeof obj !== 'string') throw new RuntimeError(expr.object, `'ends with' is only available on strings.`);
+          return obj.endsWith(stringify(arg));
+        }
+
+        if (expr.method === 'map') {
+          if (!Array.isArray(obj)) throw new RuntimeError(expr.object, `'map' is only available on arrays.`);
+          if (!(arg instanceof LythraFunction)) throw new RuntimeError(expr.argument, `'map' argument must be a function.`);
+          if (arg.arity !== 1) throw new RuntimeError(expr.argument, `'map' function must accept exactly 1 argument.`);
+
+          const result: LythraValue[] = [];
+          for (const item of obj) {
+            result.push(await arg.call(this, [item]));
+          }
+          return result;
+        }
+
+        if (expr.method === 'filter') {
+          if (!Array.isArray(obj)) throw new RuntimeError(expr.object, `'filter' is only available on arrays.`);
+          if (!(arg instanceof LythraFunction)) throw new RuntimeError(expr.argument, `'filter' argument must be a function.`);
+          if (arg.arity !== 1) throw new RuntimeError(expr.argument, `'filter' function must accept exactly 1 argument.`);
+
+          const result: LythraValue[] = [];
+          for (const item of obj) {
+            const keep = await arg.call(this, [item]);
+            if (this.isTruthy(keep)) {
+              result.push(item);
+            }
+          }
+          return result;
         }
 
         throw new RuntimeError(expr.object, `Unknown native method '${expr.method}'.`);
@@ -544,6 +664,12 @@ export class Interpreter implements InterpreterInterface {
         }
 
         return resultValue;
+      }
+      case 'ConsultExpr': {
+        // consult is an explicit pipeline invocation modifier
+        // e.g. consult Summarize("...")
+        // Syntactically it just evaluates the underlying CallExpr
+        return await this.evaluate(expr.pipeline);
       }
       default:
         throw new Error(`Unexpected expression kind: ${(expr as any).kind}`);

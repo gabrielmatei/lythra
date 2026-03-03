@@ -58,7 +58,7 @@ export interface NativePropertyExpr {
 export interface NativeMethodExpr {
   readonly kind: 'NativeMethodExpr';
   readonly object: Expr;
-  readonly method: 'contains' | 'matches';
+  readonly method: 'contains' | 'matches' | 'starts with' | 'ends with' | 'map' | 'filter';
   readonly argument: Expr;
   readonly line: number;
   readonly column: number;
@@ -185,13 +185,15 @@ export type Expr =
   | ComputedMemberExpr
   | ArrayLiteral
   | ObjectLiteral
-  | VisionExpr;
+  | VisionExpr
+  | ConsultExpr;
 
 // ─── Statements ──────────────────────────────────────────────────────────────
 
 export interface VarDeclaration {
   readonly kind: 'VarDeclaration';
   readonly name: string;
+  readonly destructuredNames?: readonly string[];
   readonly mutable: boolean;
   readonly typeAnnotation: TypeAnnotation | null;
   readonly initializer: Expr;
@@ -421,6 +423,45 @@ export interface ImportStatement {
   readonly column: number;
 }
 
+export interface EmitStatement {
+  readonly kind: 'EmitStatement';
+  readonly value: Expr;
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface StreamBlock {
+  readonly kind: 'StreamBlock';
+  readonly pipelineCall: Expr;
+  readonly iteratorName: string; // The token yielded locally
+  readonly body: Block;
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface EmitStatement {
+  readonly kind: 'EmitStatement';
+  readonly value: Expr;
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface StreamBlock {
+  readonly kind: 'StreamBlock';
+  readonly pipelineCall: Expr;
+  readonly iteratorName: string; // The token yielded locally
+  readonly body: Block;
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface ConsultExpr {
+  readonly kind: 'ConsultExpr';
+  readonly pipeline: Expr; // typically CallExpr
+  readonly line: number;
+  readonly column: number;
+}
+
 // ─── Statement Union ─────────────────────────────────────────────────────────
 
 export type Stmt =
@@ -450,6 +491,8 @@ export type Stmt =
   | StopStatement
   | ParallelBlock
   | ImportStatement
+  | StreamBlock
+  | EmitStatement
   | ExpressionStatement;
 
 // ─── Program (Root) ──────────────────────────────────────────────────────────
@@ -467,7 +510,32 @@ export interface Param {
 }
 
 // Simple type annotation — will be expanded in Phase 4 for vision<Type>
-export type TypeAnnotation = string;
+export type TypeAnnotation =
+  | PlainTypeAnnotation
+  | ArrayTypeAnnotation
+  | UnionTypeAnnotation
+  | ConstrainedTypeAnnotation;
+
+export interface PlainTypeAnnotation {
+  readonly kind: 'PlainTypeAnnotation';
+  readonly name: string;
+}
+
+export interface ArrayTypeAnnotation {
+  readonly kind: 'ArrayTypeAnnotation';
+  readonly element: TypeAnnotation;
+}
+
+export interface UnionTypeAnnotation {
+  readonly kind: 'UnionTypeAnnotation';
+  readonly variants: readonly string[]; // String literals like "spam", "ok"
+}
+
+export interface ConstrainedTypeAnnotation {
+  readonly kind: 'ConstrainedTypeAnnotation';
+  readonly base: string;
+  readonly constraints: Record<string, number>; // e.g. { max: 100, min: 1 }
+}
 
 // In Lythra, type annotations can be literals (e.g. `vision<"spam" | "ok">`)
 // For now, we store the full type string as parsed.

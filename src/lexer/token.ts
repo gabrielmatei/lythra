@@ -42,6 +42,7 @@ export const enum TokenType {
 
   // ── Keywords — Pipeline & Flow ────────────────────────────────────────────
   PIPELINE = 'PIPELINE',
+  // Phase 11 & Advanced flow
   CONSULT = 'CONSULT',
   STREAM = 'STREAM',
   PARALLEL = 'PARALLEL',
@@ -88,6 +89,9 @@ export const enum TokenType {
   CONTAINS = 'CONTAINS',
   MATCHES = 'MATCHES',
   TIMES = 'TIMES',
+  STARTS = 'STARTS',
+  ENDS = 'ENDS',
+  MAP = 'MAP',
 
   // ── Operators ─────────────────────────────────────────────────────────────
   EQUAL = 'EQUAL',
@@ -216,6 +220,9 @@ export const KEYWORDS: ReadonlyMap<string, TokenType> = new Map<string, TokenTyp
   ['length', TokenType.LENGTH],
   ['contains', TokenType.CONTAINS],
   ['matches', TokenType.MATCHES],
+  ['starts', TokenType.STARTS],
+  ['ends', TokenType.ENDS],
+  ['map', TokenType.MAP],
   // Phase 7: Web Server
   ['server', TokenType.SERVER],
   ['channel', TokenType.CHANNEL],
