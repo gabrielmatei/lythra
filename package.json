@@ -4,7 +4,7 @@
   "bin": {
     "lythra": "./bin/lythra"
   },
-  "description": "Language Yielding Typed Heuristic Reasoning Automatically",
+  "description": "A modern AI-first scripting language for building robust, deterministic, and typed heuristic reasoning workflows.",
   "type": "module",
   "main": "dist/cli/index.js",
   "scripts": {
