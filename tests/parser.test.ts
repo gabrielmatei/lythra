@@ -45,6 +45,15 @@ describe('Parser', () => {
     expect(expr.operand.kind).toBe('GroupingExpr');
   });
 
+  it('parses await keyword', () => {
+    const { program, parseErrors } = getAst('await fetchResource()');
+    expect(parseErrors).toHaveLength(0);
+
+    const expr = (program.body[0] as ast.ExpressionStatement).expression as ast.UnaryExpr;
+    expect(expr.operator).toBe('await');
+    expect(expr.operand.kind).toBe('CallExpr');
+  });
+
   it('parses variable declarations and assignments', () => {
     const { program, parseErrors } = getAst('let x: Int = 10\nx = 20\n');
     expect(parseErrors).toHaveLength(0);

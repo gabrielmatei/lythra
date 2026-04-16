@@ -1051,7 +1051,7 @@ class Parser {
         column: token.column,
       };
     }
-    if (this.match(TokenType.MINUS, TokenType.NOT)) {
+    if (this.match(TokenType.MINUS, TokenType.NOT, TokenType.AWAIT)) {
       const token = this.previous();
       const operator = token.lexeme;
       const operand = this.parseUnary();
