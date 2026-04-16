@@ -8,8 +8,14 @@ server MainApi on 4567:
       receive body as { message: String }
       transmit { response: message }
 
+  channel "/users/:id":
+    on call GET:
+      inspect params as { id: String }
+      transmit { message: "Hello user " + id }
+
 open doors
 
-log "Server running on 4567! Hit http://localhost:4567/ping"
-
+log "Server running on 4567!"
+log "Try hit: http://localhost:4567/ping"
+log "Try hit: http://localhost:4567/users/john"
 halt

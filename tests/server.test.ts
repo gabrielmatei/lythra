@@ -137,4 +137,37 @@ describe('Web Server Integration', () => {
     await runtime.execute(`stop`);
     await execPromise;
   });
+
+  it('supports dynamic path parameters', async () => {
+    const source = `
+      server TestDynamic on 4571:
+        channel "/users/:id/posts/:postId":
+          on call GET:
+            inspect params as { id: String, postId: String }
+            transmit { userId: id, post: postId }
+            
+      open doors
+    `;
+
+    const execPromise = runtime.execute(source).then(res => {
+      if (res.errors) throw new Error(res.errors.join('\\n'));
+    });
+    await new Promise(r => setTimeout(r, 500));
+
+    const res = await new Promise<{ status: number, body: string }>((resolve, reject) => {
+      http.get('http://localhost:4571/users/42/posts/100', (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => resolve({ status: res.statusCode || 500, body: data }));
+      }).on('error', reject);
+    });
+
+    expect(res.status).toBe(200);
+    const jsonBody = JSON.parse(res.body);
+    expect(jsonBody.userId).toBe('42');
+    expect(jsonBody.post).toBe('100');
+
+    await runtime.execute(`stop`);
+    await execPromise;
+  });
 });

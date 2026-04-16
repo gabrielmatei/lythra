@@ -51,13 +51,36 @@ export class LythraServer {
         try {
           // Find matching channel
           const url = req.url || '/';
+          const urlObj = new URL(url, `http://${req.headers.host || 'localhost'}`);
+          const pathname = urlObj.pathname;
           const method = req.method || 'GET';
 
           let matchedChannel: ast.ChannelDeclaration | null = null;
-          // Simple exact match for now
+          let extractedParams: Record<string, string> = {};
+
+          // Dynamic path matching: /greet/:name
           for (const channel of this.channels) {
-            if (channel.path === url) {
+            const pathParts = channel.path.split('/').filter(p => p.length > 0);
+            const reqParts = pathname.split('/').filter(p => p.length > 0);
+            
+            if (pathParts.length !== reqParts.length) continue;
+
+            let match = true;
+            const params: Record<string, string> = {};
+            for (let i = 0; i < pathParts.length; i++) {
+              const pPart = pathParts[i]!;
+              const rPart = reqParts[i]!;
+              if (pPart.startsWith(':')) {
+                params[pPart.substring(1)] = rPart;
+              } else if (pPart !== rPart) {
+                match = false;
+                break;
+              }
+            }
+
+            if (match) {
               matchedChannel = channel;
+              extractedParams = params;
               break;
             }
           }
@@ -89,9 +112,10 @@ export class LythraServer {
 
           const requestEnv = new Environment(mainInterpreter.globals); // create a top level scope explicitly for this request so it doesn't pollute globals
 
-          // Inject hidden native HTTP objects into environment
+          // Inject hidden native HTTP objects and dynamic params into environment
           requestEnv.defineInternal('__req', req);
           requestEnv.defineInternal('__res', res);
+          requestEnv.defineInternal('__params', extractedParams);
 
           try {
             // 1. Execute matching filters
