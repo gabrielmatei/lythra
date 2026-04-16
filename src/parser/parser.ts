@@ -1042,11 +1042,18 @@ class Parser {
     if (this.match(TokenType.CONSULT)) {
       const token = this.previous();
       const pipelineExpr = this.parseCall(); // Usually an invocation like `Summarize(text)`
+      let fallback: ast.Expr | null = null;
+      if (this.check(TokenType.OR) && this.current + 1 < this.tokens.length && this.tokens[this.current + 1]!.type === TokenType.FALLBACK) {
+        this.consume(TokenType.OR, "Expected 'or'");
+        this.consume(TokenType.FALLBACK, "Expected 'fallback'");
+        fallback = this.parseExpression();
+      }
+
       return {
         kind: 'ConsultExpr',
         pipeline: pipelineExpr,
         args: [],
-        fallback: null,
+        fallback,
         line: token.line,
         column: token.column,
       };
@@ -1101,11 +1108,18 @@ class Parser {
         };
       } else if (this.match(TokenType.CONSULT)) {
         const pipeline = this.parseExpression(); // This handles parsing right side of pipe 
+        let fallback: ast.Expr | null = null;
+        if (this.check(TokenType.OR) && this.current + 1 < this.tokens.length && this.tokens[this.current + 1]!.type === TokenType.FALLBACK) {
+          this.consume(TokenType.OR, "Expected 'or'");
+          this.consume(TokenType.FALLBACK, "Expected 'fallback'");
+          fallback = this.parseExpression();
+        }
+
         expr = {
           kind: 'ConsultExpr',
           pipeline,
           args: [],
-          fallback: null,
+          fallback,
           line: expr.line,
           column: expr.column,
         };

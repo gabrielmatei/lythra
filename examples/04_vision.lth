@@ -39,3 +39,18 @@ if num > 10:
   log "Success! Validated number: " + num
 else:
   log "Failed all attempts, fell back to defaults."
+
+log "\n=== Testing Pipeline and Consult ==="
+pipeline Summarize(text: String) -> String:
+  let summary = vision<String> "summarize this text in 5 words or less" using text
+  assert summary != ""
+  return summary
+
+let bad_input = ""
+let safe_result = consult Summarize(bad_input) or fallback "Failed to summarize text."
+log "Consult fallback result: " + safe_result
+
+let good_input = "Lythra makes building prompt pipelines incredibly simple due to native vision constructs."
+let summary_result = consult Summarize(good_input) or fallback "Unavailable"
+log "Summary result: " + summary_result
+

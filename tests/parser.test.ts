@@ -54,6 +54,17 @@ describe('Parser', () => {
     expect(expr.operand.kind).toBe('CallExpr');
   });
 
+  it('parses consult expression with fallback', () => {
+    const { program, parseErrors } = getAst('consult Run(data) or fallback { error: true }');
+    expect(parseErrors).toHaveLength(0);
+
+    const expr = (program.body[0] as ast.ExpressionStatement).expression as ast.ConsultExpr;
+    expect(expr.kind).toBe('ConsultExpr');
+    expect(expr.pipeline.kind).toBe('CallExpr');
+    expect(expr.fallback).not.toBeNull();
+    expect(expr.fallback!.kind).toBe('ObjectLiteral');
+  });
+
   it('parses variable declarations and assignments', () => {
     const { program, parseErrors } = getAst('let x: Int = 10\nx = 20\n');
     expect(parseErrors).toHaveLength(0);

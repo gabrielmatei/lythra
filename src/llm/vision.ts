@@ -23,7 +23,15 @@ export async function callVision(prompt: string, options: VisionOptions): Promis
 
   // 2. Resolve JSON Schema from typeAnnotation
   // We'll support some basic Lythra types mapping to OpenAPI schema types here
-  const schema = translateLythraTypeToSchema(options.typeAnnotation);
+  const rawSchema = translateLythraTypeToSchema(options.typeAnnotation);
+  const isObjectRoot = rawSchema.type === 'OBJECT';
+  
+  // Wrap top-level schemas into an object because LLMs strongly prefer JSON objects
+  const schema = isObjectRoot ? rawSchema : {
+    type: 'OBJECT',
+    properties: { result: rawSchema },
+    required: ['result']
+  };
 
   // 3. System Instruction & Prompt prep
   let fullPrompt = prompt;
@@ -66,10 +74,19 @@ export async function callVision(prompt: string, options: VisionOptions): Promis
 
       try {
         const parsed = JSON.parse(textPayload);
+        if (!isObjectRoot && parsed && typeof parsed === 'object') {
+          const vals = Object.values(parsed);
+          if (vals.length > 0) return vals[0] as LythraValue;
+        }
         return parsed;
       } catch (e) {
         const clean = textPayload.replace(/^```json\s*/, '').replace(/```\s*$/, '').trim();
-        return JSON.parse(clean);
+        const parsed = JSON.parse(clean);
+        if (!isObjectRoot && parsed && typeof parsed === 'object') {
+          const vals = Object.values(parsed);
+          if (vals.length > 0) return vals[0] as LythraValue;
+        }
+        return parsed;
       }
     } catch (err: any) {
       if (err.message.includes('fetch') || err.message.includes('ECONNREFUSED')) {
@@ -119,11 +136,20 @@ export async function callVision(prompt: string, options: VisionOptions): Promis
     try {
       // It's requested as responseMimeType: 'application/json' so the output should be strictly JSON.
       const parsed = JSON.parse(textPayload);
+      if (!isObjectRoot && parsed && typeof parsed === 'object') {
+        const vals = Object.values(parsed);
+        if (vals.length > 0) return vals[0] as LythraValue;
+      }
       return parsed; // Valid Lythra native value!
     } catch (e) {
       // In case it's not strictly JSON, try to extract it from markdown blocks
       const clean = textPayload.replace(/^```json\s*/, '').replace(/```\s*$/, '').trim();
-      return JSON.parse(clean);
+      const parsed = JSON.parse(clean);
+      if (!isObjectRoot && parsed && typeof parsed === 'object') {
+        const vals = Object.values(parsed);
+        if (vals.length > 0) return vals[0] as LythraValue;
+      }
+      return parsed;
     }
   } catch (err: any) {
     throw new Error(`Vision API Error: ${err.message}`);
