@@ -6,15 +6,22 @@ import { startRepl } from './repl.js';
 import { LythraRuntime } from '../runtime/runtime.js';
 import { existsSync } from 'fs';
 
-function loadConfig(runtime: LythraRuntime) {
-  const configPath = join(process.cwd(), 'lythra.json');
-  if (existsSync(configPath)) {
-    try {
-      const configStr = readFileSync(configPath, 'utf-8');
-      const config = JSON.parse(configStr);
-      runtime.applyGlobalConfig(config);
-    } catch (e: any) {
-      console.error("Warning: Could not parse lythra.json - " + e.message);
+function loadConfig(runtime: LythraRuntime, scriptBasePath?: string) {
+  const searchPaths = [join(process.cwd(), 'lythra.json')];
+  if (scriptBasePath) {
+    searchPaths.push(join(scriptBasePath, 'lythra.json'));
+  }
+
+  for (const configPath of searchPaths) {
+    if (existsSync(configPath)) {
+      try {
+        const configStr = readFileSync(configPath, 'utf-8');
+        const config = JSON.parse(configStr);
+        runtime.applyGlobalConfig(config);
+        return;
+      } catch (e: any) {
+        console.error("Warning: Could not parse lythra.json - " + e.message);
+      }
     }
   }
 }
@@ -36,7 +43,7 @@ async function main() {
       const absolutePath = resolve(process.cwd(), file);
       const source = readFileSync(absolutePath, 'utf-8');
       const runtime = new LythraRuntime(dirname(absolutePath));
-      loadConfig(runtime);
+      loadConfig(runtime, dirname(absolutePath));
       const result = await runtime.execute(source);
 
       if (result.errors && result.errors.length > 0) {

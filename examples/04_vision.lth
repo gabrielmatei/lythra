@@ -1,7 +1,8 @@
 # Lythra Phase 4 Demo
 
-# To run this file, you must have GEMINI_API_KEY exported in your shell.
-# try: GEMINI_API_KEY="..." lythra run examples/04_vision.lth
+# Make sure your Ollama instance is running (e.g. `ollama run gemma4` or similar).
+# If you are not using Gemma 4, you must have GEMINI_API_KEY exported in your shell.
+# try: lythra run examples/04_vision.lth
 
 log "=== Testing Basic Vision String ==="
 let greeting = vision<String> "say hello to Lythra in one fun short sentence"

@@ -1,5 +1,5 @@
 {
-  "model": "gemini-2.5-flash",
+  "model": "gemma4",
   "cache": true,
   "timeout": 30000
 }

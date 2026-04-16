@@ -11,11 +11,6 @@ export interface VisionOptions {
 }
 
 export async function callVision(prompt: string, options: VisionOptions): Promise<LythraValue> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('Vision API Error: GEMINI_API_KEY environment variable is not set.');
-  }
-
   // 1. Resolve Temperature based on modifier or explicit override
   let temperature = 0.5; // default
   if (options.temperature !== undefined && options.temperature !== null) {
@@ -37,6 +32,58 @@ export async function callVision(prompt: string, options: VisionOptions): Promis
   }
 
   const model = options.model || 'gemini-2.5-pro';
+
+  // Support for local Gemma 4 (via Ollama)
+  if (model.toLowerCase().includes('gemma')) {
+    const ollamaEndpoint = 'http://localhost:11434/api/generate';
+    // Append the expected JSON schema to the prompt so the local model knows how to structure it
+    fullPrompt += `\n\nIMPORTANT: You must respond ONLY with valid JSON that matches the following schema. Strictly adhere to this schema and do not output any other text:\n${JSON.stringify(schema, null, 2)}`;
+
+    const requestBody = {
+      model: model,
+      prompt: fullPrompt,
+      format: 'json',
+      stream: false,
+      options: {
+        temperature
+      }
+    };
+
+    try {
+      const res = await fetch(ollamaEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`Local Vision API Error (Ollama): ${res.status} ${res.statusText} - ${errorText}\nMake sure Ollama is running locally with the '${model}' model installed.`);
+      }
+
+      const data = await res.json() as any;
+      const textPayload = data.response;
+
+      try {
+        const parsed = JSON.parse(textPayload);
+        return parsed;
+      } catch (e) {
+        const clean = textPayload.replace(/^```json\s*/, '').replace(/```\s*$/, '').trim();
+        return JSON.parse(clean);
+      }
+    } catch (err: any) {
+      if (err.message.includes('fetch') || err.message.includes('ECONNREFUSED')) {
+        throw new Error(`Local Vision API Error (Ollama): Could not connect to local Ollama on port 11434. Please ensure Ollama is running.`);
+      }
+      throw new Error(`Local Vision API Error (Ollama): ${err.message}`);
+    }
+  }
+
+  // Default to Gemini API
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('Vision API Error: GEMINI_API_KEY environment variable is not set.');
+  }
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   const requestBody: any = {
@@ -47,16 +94,6 @@ export async function callVision(prompt: string, options: VisionOptions): Promis
       responseSchema: schema,
     },
   };
-
-  // 4. Resolve Seed
-  if (options.seed !== undefined) {
-    // Gemini doesn't currently support a specific integer seed natively like OpenAI.
-    // Wait, wait! Let us check if we can simulate determinism as best we can, or simply omit it if unsupported.
-    // We will omit `seed` flag in the payload for Gemini unless we know of an undocumented field. 
-    // Wait, Gemini does not have an explicit `seed` parameter in generationConfig in standard docs for `gemini-1.5-pro`. 
-    // Actually, OpenAI has a `seed` parameter. Since we switched to Gemini, we just ignore seed parameter or we can error?
-    // Let's silently ignore explicitly seeded determinism here besides sending temperature=0
-  }
 
   try {
     const res = await fetch(endpoint, {

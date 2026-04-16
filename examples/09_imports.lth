@@ -6,7 +6,7 @@ log "Pi from math.lth is: {Math.pi}"
 let sum = Math.add(10, 20)
 log "10 + 20 = {sum}"
 
-# In examples/lythra.json we enabled cache globally and explicitly pinned gemini-2.5-flash
+# In examples/lythra.json we enabled cache globally and explicitly pinned gemma4
 # Let's verify by passing a vision prompt
 let poem = vision<String> "Write a haiku about code"
 log "Extracted poem:"

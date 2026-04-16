@@ -18,7 +18,7 @@ log ""
 
 log "--- TEST 2: Remember blocks cache identical prompts ---"
 remember:
-  log "[Running First Remembered Call... this will hit Gemini]"
+  log "[Running First Remembered Call... this will hit the LLM API]"
   let cached_1 = vision<String> "say the word 'Banana'"
   log "Cached 1 result: " + cached_1
 
@@ -33,7 +33,7 @@ log "--- TEST 3: Clearing the cache ---"
 forget all
 
 remember:
-  log "[Running Third Remembered Call... this hits Gemini again because we forgot everything!]"
+  log "[Running Third Remembered Call... this hits the LLM API again because we forgot everything!]"
   let cached_3 = vision<String> "say the word 'Banana'"
   log "Cached 3 result: " + cached_3
 
