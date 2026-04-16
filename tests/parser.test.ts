@@ -139,4 +139,34 @@ pipeline Greet(name: String) -> String:
     // Even with an error in the first statement, it should recover and parse the second
     expect(program.body.length).toBeGreaterThanOrEqual(1);
   });
+
+  it('parses match statements', () => {
+    const code = `
+match status:
+  1 -> log "One"
+  "two" -> 
+    let x = 2
+    log x
+  _ -> log "Default"
+`;
+    const { program, parseErrors } = getAst(code);
+    expect(parseErrors).toHaveLength(0);
+
+    const matchStmt = program.body[0] as any;
+    expect(matchStmt.kind).toBe('MatchStatement');
+    expect(matchStmt.expression.kind).toBe('Identifier');
+    expect(matchStmt.cases).toHaveLength(3);
+    
+    // Check first case (inline stmt)
+    expect(matchStmt.cases[0].pattern.kind).toBe('NumberLiteral');
+    expect(matchStmt.cases[0].body.kind).toBe('LogStatement');
+
+    // Check second case (block)
+    expect(matchStmt.cases[1].pattern.kind).toBe('StringLiteral');
+    expect(matchStmt.cases[1].body.kind).toBe('Block');
+
+    // Check default case
+    expect(matchStmt.cases[2].pattern).toBeNull();
+  });
 });
+

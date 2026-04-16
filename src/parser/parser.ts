@@ -82,6 +82,7 @@ class Parser {
     if (this.match(TokenType.EXPORT)) return this.parseExportStatement();
     if (this.match(TokenType.EMIT)) return this.parseEmitStatement();
     if (this.match(TokenType.STREAM)) return this.parseStreamBlock();
+    if (this.match(TokenType.MATCH)) return this.parseMatchStatement();
 
     return this.parseExpressionStatement();
   }
@@ -171,6 +172,51 @@ class Parser {
     return {
       kind: 'HaltStatement',
       expression,
+      line: start.line,
+      column: start.column,
+    };
+  }
+
+  private parseMatchStatement(): ast.Stmt {
+    const start = this.previous();
+    const expression = this.parseExpression();
+    this.consume(TokenType.COLON, "Expected ':' after match expression.");
+    this.consume(TokenType.NEWLINE, "Expected newline after ':'.");
+
+    this.consume(TokenType.INDENT, "Expected indentation for match cases.");
+
+    const cases: ast.MatchCase[] = [];
+
+    while (!this.check(TokenType.DEDENT) && !this.isAtEnd()) {
+      while (this.match(TokenType.NEWLINE)) { } // skip blank lines
+      if (this.check(TokenType.DEDENT)) break;
+
+      let pattern: ast.Expr | null = null;
+      if (this.match(TokenType.IDENTIFIER) && this.previous().lexeme === '_') {
+        pattern = null; // Default case
+      } else {
+        pattern = this.parseExpression();
+      }
+
+      this.consume(TokenType.ARROW, "Expected '->' after match pattern.");
+
+      let body: ast.Stmt | ast.Block;
+      if (this.match(TokenType.NEWLINE)) {
+        body = this.parseBlock();
+      } else {
+        body = this.parseStatement();
+      }
+
+      cases.push({ pattern, body });
+      while (this.match(TokenType.NEWLINE)) { } // consume trailing
+    }
+
+    this.consume(TokenType.DEDENT, "Expected dedent after match block.");
+
+    return {
+      kind: 'MatchStatement',
+      expression,
+      cases,
       line: start.line,
       column: start.column,
     };

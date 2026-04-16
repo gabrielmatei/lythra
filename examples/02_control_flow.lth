@@ -31,3 +31,12 @@ let items = ["apple", "banana", "cherry"]
 
 for fruit in items:
   log "I like " + fruit
+
+# Match statements
+log "\nPattern matching:"
+let status = "success"
+
+match status:
+  "success" -> log "Operation completed successfully!"
+  "error"   -> log "Something went wrong."
+  _         -> log "Unknown status."

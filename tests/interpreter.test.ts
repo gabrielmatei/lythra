@@ -9,7 +9,10 @@ async function execute(source: string, interpreter = new Interpreter()) {
   if (lexErrors.length > 0) throw new Error(`Lex errors: ${lexErrors[0]!.message}`);
 
   const { program, errors: parseErrors } = parse(tokens);
-  if (parseErrors.length > 0) throw new Error(`Parse errors: ${parseErrors[0]!.message}`);
+  if (parseErrors.length > 0) {
+    console.error(parseErrors);
+    throw new Error(`Parse errors: ${parseErrors[0]!.message} at ${parseErrors[0]!.line}:${parseErrors[0]!.column}`);
+  }
 
   return await interpreter.interpret(program);
 }
@@ -146,4 +149,28 @@ for item in list:
     expect(consoleSpy).toHaveBeenCalledWith('3');
     consoleSpy.mockRestore();
   });
+
+  it('evaluates match statements', async () => {
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
+    const code = `
+fn runMatch(val):
+  match val:
+    1 -> log "One"
+    "two" -> 
+      log "Two block"
+      log "End two"
+    _ -> log "Default"
+
+runMatch(1)
+runMatch("two")
+runMatch(99)
+`;
+    await execute(code);
+    expect(consoleSpy).toHaveBeenNthCalledWith(1, 'One');
+    expect(consoleSpy).toHaveBeenNthCalledWith(2, 'Two block');
+    expect(consoleSpy).toHaveBeenNthCalledWith(3, 'End two');
+    expect(consoleSpy).toHaveBeenNthCalledWith(4, 'Default');
+    consoleSpy.mockRestore();
+  });
 });
+

@@ -144,6 +144,31 @@ export class Interpreter implements InterpreterInterface {
         }
         break;
       }
+      case 'MatchStatement': {
+        const val = await this.evaluate(stmt.expression);
+        let matched = false;
+
+        for (const matchCase of stmt.cases) {
+          let caseMatches = false;
+          if (matchCase.pattern === null) {
+            caseMatches = true; // _ default case
+          } else {
+            const patVal = await this.evaluate(matchCase.pattern);
+            caseMatches = val === patVal;
+          }
+
+          if (caseMatches) {
+            matched = true;
+            if (matchCase.body.kind === 'Block') {
+              await this.executeBlock(matchCase.body.statements, new Environment(this.environment));
+            } else {
+              await this.executeBlock([matchCase.body as ast.Stmt], new Environment(this.environment));
+            }
+            break;
+          }
+        }
+        break;
+      }
       case 'ForStatement': {
         const iterable = await this.evaluate(stmt.iterable);
         if (!Array.isArray(iterable)) throw new RuntimeError(stmt.iterable, 'Can only iterate over arrays.');

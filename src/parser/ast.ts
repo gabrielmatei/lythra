@@ -390,6 +390,19 @@ export interface AssertStatement {
   readonly column: number;
 }
 
+export interface MatchCase {
+  readonly pattern: Expr | null;
+  readonly body: Stmt | Block;
+}
+
+export interface MatchStatement {
+  readonly kind: 'MatchStatement';
+  readonly expression: Expr;
+  readonly cases: readonly MatchCase[];
+  readonly line: number;
+  readonly column: number;
+}
+
 // ─── Statements ───
 
 export interface OpenDoorsStatement {
@@ -500,6 +513,7 @@ export type Stmt =
   | HaltStatement
   | IfStatement
   | WhileStatement
+  | MatchStatement
   | ForStatement
   | ReturnStatement
   | FnDeclaration
