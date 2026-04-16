@@ -23,6 +23,12 @@ precise:
 wild:
   let story = vision<String> "write a 1 sentence creative story about a robot learning to code"
   log "Wild: " + story
+log ""
+
+log "=== Testing Model & Temperature Overrides ==="
+# You can explicitly set the LLM model and its sampling temperature inline instead of relying on the global block modifers
+let custom = vision<String> "write a short haiku about coding" model "gemma4" temperature 0.8
+log "Custom overrides generated: " + custom
 
 log ""
 

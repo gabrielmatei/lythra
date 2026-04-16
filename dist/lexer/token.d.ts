@@ -49,6 +49,7 @@ export declare const enum TokenType {
     STOP = "STOP",
     CONFIG = "CONFIG",
     MODEL = "MODEL",
+    TEMPERATURE = "TEMPERATURE",
     CACHE = "CACHE",
     TIMEOUT = "TIMEOUT",
     IMPORT = "IMPORT",

@@ -65,6 +65,7 @@ export const enum TokenType {
   // ── Keywords — Configuration & Meta ───────────────────────────────────────
   CONFIG = 'CONFIG',
   MODEL = 'MODEL',
+  TEMPERATURE = 'TEMPERATURE',
   CACHE = 'CACHE',
   TIMEOUT = 'TIMEOUT',
   IMPORT = 'IMPORT',
@@ -200,6 +201,7 @@ export const KEYWORDS: ReadonlyMap<string, TokenType> = new Map<string, TokenTyp
   ['stop', TokenType.STOP],
   ['config', TokenType.CONFIG],
   ['model', TokenType.MODEL],
+  ['temperature', TokenType.TEMPERATURE],
   ['cache', TokenType.CACHE],
   ['timeout', TokenType.TIMEOUT],
   ['import', TokenType.IMPORT],

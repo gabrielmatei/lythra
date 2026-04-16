@@ -1313,13 +1313,8 @@ class Parser {
         modelOverride = this.consume(TokenType.STRING, "Expected string literal for model override.").literal as string;
       }
 
-      // Note: temperature could be just a number identifier or a literal in some cases, but the spec says `temperature 1.0`.
-      // The keyword 'temperature' is not yet in our token map! Let's just use IDENTIFIER 'temperature' for now to avoid re-mapping if we don't have to,
-      // or we can add TEMPERATURE to keywords. Wait, we don't have TEMPERATURE in token.ts. 
-      // Let's check if the identifier matches "temperature".
       let temperatureOverride: number | null = null;
-      if (this.check(TokenType.IDENTIFIER) && this.peek().lexeme === 'temperature') {
-        this.advance(); // consume 'temperature'
+      if (this.match(TokenType.TEMPERATURE)) {
         temperatureOverride = this.consume(TokenType.NUMBER, "Expected number literal for temperature override.").literal as number;
       }
 

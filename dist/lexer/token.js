@@ -45,6 +45,7 @@ export const KEYWORDS = new Map([
     ['stop', "STOP" /* TokenType.STOP */],
     ['config', "CONFIG" /* TokenType.CONFIG */],
     ['model', "MODEL" /* TokenType.MODEL */],
+    ['temperature', "TEMPERATURE" /* TokenType.TEMPERATURE */],
     ['cache', "CACHE" /* TokenType.CACHE */],
     ['timeout', "TIMEOUT" /* TokenType.TIMEOUT */],
     ['import', "IMPORT" /* TokenType.IMPORT */],
